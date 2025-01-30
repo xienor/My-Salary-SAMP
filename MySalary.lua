@@ -149,15 +149,29 @@ function imgui.OnDrawFrame()
 		imgui.SetNextWindowSize(imgui.ImVec2(settings.widget_size.width.v, settings.widget_size.height.v), imgui.Cond_FirstUseEver)
         imgui.ShowCursor = false
         imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
+		
+		imgui.Columns(2, nil, false)
+		imgui.SetColumnWidth(0, 60)
+		
         imgui.Text(u8'Доход: ')
-        imgui.SameLine()
+        imgui.NextColumn()
         imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), formatNumber(earned) .. u8' $') -- Зеленый
+		imgui.NextColumn()
+		
         imgui.Text(u8'Расход: ')
-        imgui.SameLine()
+        imgui.NextColumn()
         imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), formatNumber(spended) .. u8' $') -- Красный
+		imgui.NextColumn()
+		
+		imgui.Separator()
+		
         imgui.Text(u8'Итог: ')
-        imgui.SameLine()
+        imgui.NextColumn()
         imgui.TextColored(imgui.ImVec4(1, 0.84, 0, 1), formatNumber(sessionSalary) .. u8' $') -- Золотой
+		imgui.NextColumn()
+		
+		imgui.Columns(1)
+		
         imgui.End()
     end
 
@@ -168,10 +182,26 @@ function imgui.OnDrawFrame()
         imgui.Begin('My Salary Main Window', main_window_state, imgui.WindowFlags_NoCollapse)
 
         -- Спойлер "Статистика"
-        if imgui.CollapsingHeader(u8'Статистика (WIP)') then
-            imgui.Text(u8'Здесь будет статистика...')
-        end
-
+		if imgui.CollapsingHeader(u8"Статистика") then
+			imgui.Indent(10) -- Добавляем отступ для всех дат
+			
+			if next(data.salary) == nil then
+				imgui.Text(u8"Нет данных для отображения")
+			else
+				for date, stats in pairs(data.salary) do
+					if imgui.CollapsingHeader(u8(date)) then
+						imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
+						imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
+						imgui.Separator()						
+						imgui.Text(u8'Итог: ' .. formatNumber(stats.sessionSalary) .. u8' $')
+					end
+				end
+			end
+			imgui.Unindent(10) -- Возвращаем отступ обратно
+		end
+		
+		imgui.Separator()
+		
         -- Спойлер "Настройки"
         if imgui.CollapsingHeader(u8'Настройки') then
             imgui.Text(u8'Видимость виджета:')
@@ -181,10 +211,14 @@ function imgui.OnDrawFrame()
 				data.settings.widget_visible = settings.widget_visible.v -- Сохраняем в структуру данных
 				saveData() -- Сохраняем изменения
 			end
-
+			
+			imgui.Separator()
+			
             imgui.Text(u8'Позиция виджета:')
             imgui.SliderInt("X", settings.widget_position.x, 0, 1920)
             imgui.SliderInt("Y", settings.widget_position.y, 0, 1080)
+
+			imgui.Separator()
 
             imgui.Text(u8'Размер виджета:')
             imgui.SliderInt(u8"Ширина", settings.widget_size.width, 100, 500)

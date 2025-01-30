@@ -112,7 +112,6 @@ end
 -- Основная функция
 function main()
 	while not isSampAvailable() do wait(0) end
-    sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт активирован. Вывести окно: {3d85c6} /msalary", 0xFFFFFF)
     sampRegisterChatCommand("msalary", openMainWindow)
     loadData()
 	
@@ -121,6 +120,7 @@ function main()
 	imgui.Process = true
 	while true do
         if sampIsLocalPlayerSpawned() then
+			sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт активирован. Меню, настройки: {3d85c6} /msalary", 0xFFFFFF)
             currentMoney = getPlayerMoney(Player)
             while true do
                 playerMoney = getPlayerMoney(Player)
@@ -168,7 +168,7 @@ function imgui.OnDrawFrame()
         imgui.Begin('My Salary Main Window', main_window_state, imgui.WindowFlags_NoCollapse)
 
         -- Спойлер "Статистика"
-        if imgui.CollapsingHeader(u8'Статистика') then
+        if imgui.CollapsingHeader(u8'Статистика (WIP)') then
             imgui.Text(u8'Здесь будет статистика...')
         end
 

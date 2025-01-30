@@ -1,6 +1,6 @@
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.5")
+script_version("0.6")
 
 require 'moonloader'
 local imgui = require 'imgui'
@@ -20,12 +20,14 @@ local widget_state = imgui.ImBool(false) -- Видимость виджета
 local main_window_state = imgui.ImBool(false) -- Видимость главного окна
 local widget_position = { x = 100, y = 100 } -- Позиция виджета
 local widget_size = { width = 150, height = 100 } -- Размер виджета
+local widget_text_size = imgui.ImInt(14)
 
 -- Настройки
 local settings = {
     widget_visible = imgui.ImBool(false), -- Видимость виджета
     widget_position = { x = imgui.ImInt(100), y = imgui.ImInt(100) }, -- Позиция виджета
-    widget_size = { width = imgui.ImInt(150), height = imgui.ImInt(100) } -- Размер виджета
+    widget_size = { width = imgui.ImInt(150), height = imgui.ImInt(100) }, -- Размер виджета
+	widget_text_size = imgui.ImInt(14)
 }
 
 -- Путь к JSON-файлу
@@ -37,7 +39,8 @@ local data = {
     settings = {
         widget_visible = false,
         widget_position = { x = 100, y = 100 },
-        widget_size = { width = 150, height = 100 }
+        widget_size = { width = 150, height = 100 },
+		widget_text_size = 14
     },
     update_date = "" -- Последняя дата обновления
 }
@@ -78,6 +81,7 @@ function loadData()
             width = imgui.ImInt(data.settings.widget_size.width or 150),
             height = imgui.ImInt(data.settings.widget_size.height or 100)
         }
+		settings.widget_text_size = imgui.ImInt(data.settings.widget_text_size or 10)
 		widget_state.v = settings.widget_visible.v
     end
 end
@@ -102,7 +106,8 @@ function saveData()
         widget_size = {
             width = settings.widget_size.width.v, -- Преобразуем в число
             height = settings.widget_size.height.v -- Преобразуем в число
-		}
+		},
+		widget_text_size = settings.widget_text_size.v
 	}
     local file = io.open(path, "w")
     file:write(encodeJson(data))
@@ -141,8 +146,22 @@ function main()
     end
 end
 
+local fontsize = nil
+function imgui.BeforeDrawFrame()
+    if fontsize == nil then
+		imgui.GetIO().Fonts:Clear()
+        fontsize = imgui.GetIO().Fonts:AddFontFromFileTTF(getFolderPath(0x14) .. '\\trebucbd.ttf', settings.widget_text_size.v, nil, imgui.GetIO().Fonts:GetGlyphRangesCyrillic())
+    end
+end
+
+
 -- Рендеринг GUI
 function imgui.OnDrawFrame()
+
+	if not main_window_state.v then
+        imgui.ShowCursor = false
+    end
+	
     -- Рисуем виджет, если он включен
     if settings.widget_visible.v then
         imgui.SetNextWindowPos(imgui.ImVec2(settings.widget_position.x.v, settings.widget_position.y.v), imgui.Cond_FirstUseEver)
@@ -150,6 +169,7 @@ function imgui.OnDrawFrame()
         imgui.ShowCursor = false
         imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		
+		imgui.PushFont(fontsize)
 		imgui.Columns(2, nil, false)
 		imgui.SetColumnWidth(0, 60)
 		
@@ -171,6 +191,7 @@ function imgui.OnDrawFrame()
 		imgui.NextColumn()
 		
 		imgui.Columns(1)
+		imgui.PopFont()
 		
         imgui.End()
     end
@@ -223,15 +244,28 @@ function imgui.OnDrawFrame()
             imgui.Text(u8'Размер виджета:')
             imgui.SliderInt(u8"Ширина", settings.widget_size.width, 100, 500)
             imgui.SliderInt(u8"Высота", settings.widget_size.height, 50, 300)
-
+			
+			imgui.Separator()
+			
+			imgui.Text(u8'Размер шрифта')
+			imgui.SliderInt(u8"Размер", settings.widget_text_size, 5, 20)
             saveData()
+			imgui.SameLine()
+			if imgui.Button(u8'Применить') then
+				saveData()
+				sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт будет перезагружен...", 0xFFFFFF)
+				main_window_state.v = false
+				showCursor(false,false)
+				imgui.Process = false
+				thisScript():reload()
+			end
         end
 
         imgui.End()
     end
 	
 	-- Если оба окна закрыты, скрываем курсор
-	if not main_window_state.v and not widget_state.v then
+	if not main_window_state.v then
 		imgui.ShowCursor = false
 	end
 end

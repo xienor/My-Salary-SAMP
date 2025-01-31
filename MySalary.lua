@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.8.1")
+script_version("0.8.2")
 
 --Подключение библиотек
 require 'moonloader'
@@ -14,6 +14,7 @@ encoding.default = 'CP1251'
 u8 = encoding.UTF8
 
 -- Глобальные переменные
+local lastOperations = {}
 local playerMoney = 0 -- Деньги у игрока
 local currentMoney = 0 -- Деньги записанные в скрипте
 local earned = 0 -- Получено денег
@@ -142,15 +143,19 @@ function main()
 			sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт активирован. Меню, настройки: {3d85c6} /msalary", 0xFFFFFF)
             currentMoney = getPlayerMoney(Player)
             while true do
-                playerMoney = getPlayerMoney(Player)
-                if currentMoney < playerMoney then
-                    earned = earned + (playerMoney - currentMoney)
-                elseif currentMoney > playerMoney then
-                    spended = spended - (currentMoney - playerMoney)
-                end
-                sessionSalary = earned + spended
-                currentMoney = playerMoney
-
+				if sampIsLocalPlayerSpawned() then -- Защита от вылетов (не учитывает операции в случае дисконекта)
+					playerMoney = getPlayerMoney(Player)
+					if currentMoney < playerMoney then
+						earned = earned + (playerMoney - currentMoney)
+						lastOperations[os.date("%H:%M:%S")] = string.format('+' .. formatNumber((playerMoney - currentMoney)) .. ' $')
+					elseif currentMoney > playerMoney then
+						spended = spended - (currentMoney - playerMoney)
+						lastOperations[os.date("%H:%M:%S")] = string.format('-' .. formatNumber((currentMoney - playerMoney)) .. ' $')
+					end
+					sessionSalary = earned + spended
+					currentMoney = playerMoney
+				end
+                
                 saveData() -- Сохранение данных при каждом изменении суммы
                 wait(0)
             end
@@ -225,8 +230,12 @@ function imgui.OnDrawFrame()
 			tabN = 1
 		end
 		imgui.SameLine()
+		if imgui.Button(u8'Последние операции') then
+			tabN = 2
+		end
+		imgui.SameLine()
 		if imgui.Button(u8'Настройки') then
-		tabN = 2
+		tabN = 3
 		end
 		
 		imgui.Separator()
@@ -250,8 +259,15 @@ function imgui.OnDrawFrame()
 			end
 		end
 		
-		
 		if tabN == 2 then
+			imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X",os.time()))
+			imgui.Separator()
+			for operationTime, summ in pairs(lastOperations) do
+				imgui.Text(operationTime .. ': ' .. summ)
+			end
+		end
+		
+		if tabN == 3 then
 			imgui.Text(u8'Видимость виджета:')
             imgui.SameLine()
             if imgui.Checkbox(u8"Включено", settings.widget_visible) then
@@ -332,7 +348,8 @@ function calcOnline(mode, prevOnline)
     return string.format("%02d:%02d:%02d", timeHours, timeMins, timeSecs)
 end
 
-function script.onExit()
-    saveData()
-    sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Данные сохранены. Выключение скрипта", 0xFFFFFF)
+function onReceivePacket(id)
+    if id == 32 then
+		thisScript():unload()
+    end
 end

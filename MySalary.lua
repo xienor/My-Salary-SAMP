@@ -1,46 +1,53 @@
+--Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.8")
+script_version("0.8.1")
 
+--Подключение библиотек
 require 'moonloader'
 local imgui = require 'imgui'
 local events = require 'lib.samp.events'
 local encoding = require 'encoding'
+
+--Кодировка
 encoding.default = 'CP1251'
 u8 = encoding.UTF8
 
 -- Глобальные переменные
-local playerMoney = 0
-local currentMoney = 0
-local earned = 0
-local spended = 0
-local sessionSalary = 0
+local playerMoney = 0 -- Деньги у игрока
+local currentMoney = 0 -- Деньги записанные в скрипте
+local earned = 0 -- Получено денег
+local spended = 0 -- Потрачено денег
+local sessionSalary = 0 --Общий доход за день
 
-local totalOnlineTime = 0
-local timeSecs = 0
-local timeMins = 0
-local timeHours = 0
+local totalOnlineTime = 0 -- Общий онлайн за деднь
+local timeSecs = 0 -- Онлайн секунд
+local timeMins = 0 -- Онлайн минут
+local timeHours = 0 -- Онлайн часов
 
+local tabN = 1
+
+-- Переменные характеристик скрипта
 local widget_state = imgui.ImBool(false) -- Видимость виджета
 local main_window_state = imgui.ImBool(false) -- Видимость главного окна
 local widget_position = { x = 100, y = 100 } -- Позиция виджета
 local widget_size = { width = 150, height = 100 } -- Размер виджета
-local widget_text_size = imgui.ImInt(14)
+local widget_text_size = imgui.ImInt(14) -- Размер текста
 
 -- Настройки
 local settings = {
     widget_visible = imgui.ImBool(false), -- Видимость виджета
     widget_position = { x = imgui.ImInt(100), y = imgui.ImInt(100) }, -- Позиция виджета
     widget_size = { width = imgui.ImInt(150), height = imgui.ImInt(100) }, -- Размер виджета
-	widget_text_size = imgui.ImInt(14)
+	widget_text_size = imgui.ImInt(14) -- Размер текста
 }
 
 -- Путь к JSON-файлу
 local path = getWorkingDirectory() .. "\\config\\MySalary[Data].json"
 
--- Структуры данных
+-- Структура данных
 local data = {
-    salary = {}, -- Здесь будут храниться данные по дням
+    salary = {}, -- Таблица доходов
     settings = {
         widget_visible = false,
         widget_position = { x = 100, y = 100 },
@@ -77,7 +84,7 @@ function loadData()
 		totalOnlineTime = 0
     end
 
-    -- Загружаем настройки
+    -- Загрузка настроек
     if data and data.settings then
         settings.widget_visible = imgui.ImBool(data.settings.widget_visible)
         settings.widget_position = {
@@ -104,16 +111,16 @@ function saveData()
     }
     data.update_date = currentDate
 
-    -- Сохраняем настройки
+    -- Сохранение настроек
     data.settings = {
         widget_visible = settings.widget_visible.v,
         widget_position = {
-            x = settings.widget_position.x.v, -- Преобразуем в число
-            y = settings.widget_position.y.v -- Преобразуем в число
+            x = settings.widget_position.x.v,
+            y = settings.widget_position.y.v
         },
         widget_size = {
-            width = settings.widget_size.width.v, -- Преобразуем в число
-            height = settings.widget_size.height.v -- Преобразуем в число
+            width = settings.widget_size.width.v,
+            height = settings.widget_size.height.v
 		},
 		widget_text_size = settings.widget_text_size.v
 	}
@@ -128,9 +135,8 @@ function main()
     sampRegisterChatCommand("msalary", openMainWindow)
     loadData()
 	
-    -- Устанавливаем состояние виджета
-    widget_state.v = settings.widget_visible.v
-	imgui.Process = true
+    widget_state.v = settings.widget_visible.v -- Устанавливаем состояние виджета
+	imgui.Process = true -- Запуск ImGui
 	while true do
         if sampIsLocalPlayerSpawned() then
 			sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт активирован. Меню, настройки: {3d85c6} /msalary", 0xFFFFFF)
@@ -145,7 +151,7 @@ function main()
                 sessionSalary = earned + spended
                 currentMoney = playerMoney
 
-                saveData() -- Сохраняем данные при каждом изменении суммы
+                saveData() -- Сохранение данных при каждом изменении суммы
                 wait(0)
             end
         end
@@ -169,7 +175,7 @@ function imgui.OnDrawFrame()
         imgui.ShowCursor = false
     end
 	
-    -- Рисуем виджет, если он включен
+	-- Виджет
     if settings.widget_visible.v then
         imgui.SetNextWindowPos(imgui.ImVec2(settings.widget_position.x.v, settings.widget_position.y.v), imgui.Cond_FirstUseEver)
 		imgui.SetNextWindowSize(imgui.ImVec2(settings.widget_size.width.v, settings.widget_size.height.v), imgui.Cond_FirstUseEver)
@@ -207,16 +213,26 @@ function imgui.OnDrawFrame()
         imgui.End()
     end
 
-    -- Рисуем главное окно, если оно открыто
+	-- Главное окно
     if main_window_state.v then
         imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond_FirstUseEver)
         imgui.ShowCursor = true
         imgui.Begin('My Salary Main Window', main_window_state, imgui.WindowFlags_NoCollapse)
 
-        -- Спойлер "Статистика"
-		if imgui.CollapsingHeader(u8"Статистика") then
+		
+		
+		if imgui.Button(u8'Статистика') then
+			tabN = 1
+		end
+		imgui.SameLine()
+		if imgui.Button(u8'Настройки') then
+		tabN = 2
+		end
+		
+		imgui.Separator()
+		
+		if tabN == 1 then
 			saveData()
-			imgui.Indent(10) -- Добавляем отступ для всех дат
 			
 			if next(data.salary) == nil then
 				imgui.Text(u8"Нет данных для отображения")
@@ -232,19 +248,16 @@ function imgui.OnDrawFrame()
 					end
 				end
 			end
-			imgui.Unindent(10) -- Возвращаем отступ обратно
 		end
 		
-		imgui.Separator()
 		
-        -- Спойлер "Настройки"
-        if imgui.CollapsingHeader(u8'Настройки') then
-            imgui.Text(u8'Видимость виджета:')
+		if tabN == 2 then
+			imgui.Text(u8'Видимость виджета:')
             imgui.SameLine()
             if imgui.Checkbox(u8"Включено", settings.widget_visible) then
-				widget_state.v = settings.widget_visible.v -- Обновляем видимость виджета
-				data.settings.widget_visible = settings.widget_visible.v -- Сохраняем в структуру данных
-				saveData() -- Сохраняем изменения
+				widget_state.v = settings.widget_visible.v
+				data.settings.widget_visible = settings.widget_visible.v
+				saveData()
 			end
 			
 			imgui.Separator()
@@ -273,8 +286,7 @@ function imgui.OnDrawFrame()
 				imgui.Process = false
 				thisScript():reload()
 			end
-        end
-
+		end
         imgui.End()
     end
 	
@@ -287,7 +299,6 @@ end
 -- Открытие/закрытие окна
 function openMainWindow()
     main_window_state.v = not main_window_state.v
-    --imgui.Process = main_window_state.v
 end
 
 -- Форматирование чисел
@@ -302,12 +313,11 @@ function getCurrentDate()
 end
 
 function calcOnline(mode, prevOnline)
-    -- Получаем время текущей сессии
-    local sessionTime = gameClock() -- В секундах
+    local sessionTime = gameClock()
     
 	local totalTime
 	if mode == 0 then
-		totalTime = totalOnlineTime + sessionTime -- Общее время = время текущей сессии + сохраненное время
+		totalTime = totalOnlineTime + sessionTime
 	else 
 		totalTime = prevOnline or 0
 	end
@@ -324,5 +334,5 @@ end
 
 function script.onExit()
     saveData()
-    sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Данные сохранены.", 0xFFFFFF)
+    sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Данные сохранены. Выключение скрипта", 0xFFFFFF)
 end

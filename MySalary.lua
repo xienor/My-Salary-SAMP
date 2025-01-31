@@ -1,6 +1,6 @@
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.6")
+script_version("0.8")
 
 require 'moonloader'
 local imgui = require 'imgui'
@@ -15,6 +15,11 @@ local currentMoney = 0
 local earned = 0
 local spended = 0
 local sessionSalary = 0
+
+local totalOnlineTime = 0
+local timeSecs = 0
+local timeMins = 0
+local timeHours = 0
 
 local widget_state = imgui.ImBool(false) -- Видимость виджета
 local main_window_state = imgui.ImBool(false) -- Видимость главного окна
@@ -64,10 +69,12 @@ function loadData()
         earned = data.salary[currentDate].earned or 0
         spended = data.salary[currentDate].spended or 0
         sessionSalary = data.salary[currentDate].sessionSalary or 0
+		totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
     else
         earned = 0
         spended = 0
         sessionSalary = 0
+		totalOnlineTime = 0
     end
 
     -- Загружаем настройки
@@ -92,7 +99,8 @@ function saveData()
     data.salary[currentDate] = {
         earned = earned,
         spended = spended,
-        sessionSalary = sessionSalary
+        sessionSalary = sessionSalary,
+		totalOnlineTime = totalOnlineTime + gameClock()
     }
     data.update_date = currentDate
 
@@ -137,8 +145,7 @@ function main()
                 sessionSalary = earned + spended
                 currentMoney = playerMoney
 
-                -- Сохраняем данные при каждом изменении суммы
-                saveData()
+                saveData() -- Сохраняем данные при каждом изменении суммы
                 wait(0)
             end
         end
@@ -168,6 +175,10 @@ function imgui.OnDrawFrame()
 		imgui.SetNextWindowSize(imgui.ImVec2(settings.widget_size.width.v, settings.widget_size.height.v), imgui.Cond_FirstUseEver)
         imgui.ShowCursor = false
         imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
+		
+		imgui.Text(u8'Онлайн: ' .. calcOnline(0, 0))
+		
+		imgui.Separator()
 		
 		imgui.PushFont(fontsize)
 		imgui.Columns(2, nil, false)
@@ -204,6 +215,7 @@ function imgui.OnDrawFrame()
 
         -- Спойлер "Статистика"
 		if imgui.CollapsingHeader(u8"Статистика") then
+			saveData()
 			imgui.Indent(10) -- Добавляем отступ для всех дат
 			
 			if next(data.salary) == nil then
@@ -211,6 +223,8 @@ function imgui.OnDrawFrame()
 			else
 				for date, stats in pairs(data.salary) do
 					if imgui.CollapsingHeader(u8(date)) then
+						imgui.Text(u8'Онлайн за день: ' .. calcOnline(1, stats.totalOnlineTime))
+						imgui.Separator()
 						imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
 						imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
 						imgui.Separator()						
@@ -285,4 +299,30 @@ end
 -- Функция для получения текущей даты
 function getCurrentDate()
     return os.date("%Y-%m-%d") -- Формат: 2025-01-29
+end
+
+function calcOnline(mode, prevOnline)
+    -- Получаем время текущей сессии
+    local sessionTime = gameClock() -- В секундах
+    
+	local totalTime
+	if mode == 0 then
+		totalTime = totalOnlineTime + sessionTime -- Общее время = время текущей сессии + сохраненное время
+	else 
+		totalTime = prevOnline or 0
+	end
+    
+    -- Конвертируем в часы, минуты, секунды
+    local timeHours = math.floor(totalTime / 3600)
+    local remaining = totalTime % 3600
+    local timeMins = math.floor(remaining / 60)
+    local timeSecs = remaining % 60
+    
+    -- Возвращаем отформатированную строку
+    return string.format("%02d:%02d:%02d", timeHours, timeMins, timeSecs)
+end
+
+function script.onExit()
+    saveData()
+    sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Данные сохранены.", 0xFFFFFF)
 end

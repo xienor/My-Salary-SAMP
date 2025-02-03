@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.8.2")
+script_version("0.9")
 
 --Подключение библиотек
 require 'moonloader'
@@ -19,7 +19,11 @@ local playerMoney = 0 -- Деньги у игрока
 local currentMoney = 0 -- Деньги записанные в скрипте
 local earned = 0 -- Получено денег
 local spended = 0 -- Потрачено денег
-local sessionSalary = 0 --Общий доход за день
+local daySalary = 0 --Общий доход за день
+
+local sessionEarn = 0
+local sessionSpend = 0
+local sessSalary = 0
 
 local totalOnlineTime = 0 -- Общий онлайн за деднь
 local timeSecs = 0 -- Онлайн секунд
@@ -27,6 +31,7 @@ local timeMins = 0 -- Онлайн минут
 local timeHours = 0 -- Онлайн часов
 
 local tabN = 1
+local statTab = 1
 
 -- Переменные характеристик скрипта
 local widget_state = imgui.ImBool(false) -- Видимость виджета
@@ -34,13 +39,15 @@ local main_window_state = imgui.ImBool(false) -- Видимость главного окна
 local widget_position = { x = 100, y = 100 } -- Позиция виджета
 local widget_size = { width = 150, height = 100 } -- Размер виджета
 local widget_text_size = imgui.ImInt(14) -- Размер текста
+local widget_stat_mode = imgui.ImBool(false) -- Режим работы виджета (0 - сессия, 1 - день)
 
 -- Настройки
 local settings = {
     widget_visible = imgui.ImBool(false), -- Видимость виджета
     widget_position = { x = imgui.ImInt(100), y = imgui.ImInt(100) }, -- Позиция виджета
     widget_size = { width = imgui.ImInt(150), height = imgui.ImInt(100) }, -- Размер виджета
-	widget_text_size = imgui.ImInt(14) -- Размер текста
+	widget_text_size = imgui.ImInt(14), -- Размер текста
+	widget_stat_mode = imgui.ImBool(false) -- Режим работы виджета (0 - сессия, 1 - день)
 }
 
 -- Путь к JSON-файлу
@@ -53,7 +60,8 @@ local data = {
         widget_visible = false,
         widget_position = { x = 100, y = 100 },
         widget_size = { width = 150, height = 100 },
-		widget_text_size = 14
+		widget_text_size = 14,
+		widget_stat_mode = false
     },
     update_date = "" -- Последняя дата обновления
 }
@@ -76,12 +84,12 @@ function loadData()
     if data.salary[currentDate] then
         earned = data.salary[currentDate].earned or 0
         spended = data.salary[currentDate].spended or 0
-        sessionSalary = data.salary[currentDate].sessionSalary or 0
+        daySalary = data.salary[currentDate].daySalary or 0
 		totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
     else
         earned = 0
         spended = 0
-        sessionSalary = 0
+        daySalary = 0
 		totalOnlineTime = 0
     end
 
@@ -98,6 +106,7 @@ function loadData()
         }
 		settings.widget_text_size = imgui.ImInt(data.settings.widget_text_size or 10)
 		widget_state.v = settings.widget_visible.v
+		settings.widget_stat_mode = imgui.ImBool(data.settings.widget_stat_mode)
     end
 end
 
@@ -107,7 +116,7 @@ function saveData()
     data.salary[currentDate] = {
         earned = earned,
         spended = spended,
-        sessionSalary = sessionSalary,
+        daySalary = daySalary,
 		totalOnlineTime = totalOnlineTime + gameClock()
     }
     data.update_date = currentDate
@@ -123,7 +132,8 @@ function saveData()
             width = settings.widget_size.width.v,
             height = settings.widget_size.height.v
 		},
-		widget_text_size = settings.widget_text_size.v
+		widget_text_size = settings.widget_text_size.v,
+		widget_stat_mode = settings.widget_stat_mode.v
 	}
     local file = io.open(path, "w")
     file:write(encodeJson(data))
@@ -147,12 +157,15 @@ function main()
 					playerMoney = getPlayerMoney(Player)
 					if currentMoney < playerMoney then
 						earned = earned + (playerMoney - currentMoney)
+						sessionEarn = sessionEarn + (playerMoney - currentMoney)
 						lastOperations[os.date("%H:%M:%S")] = string.format('+' .. formatNumber((playerMoney - currentMoney)) .. ' $')
 					elseif currentMoney > playerMoney then
 						spended = spended - (currentMoney - playerMoney)
+						sessionSpend = sessionSpend - (currentMoney - playerMoney)
 						lastOperations[os.date("%H:%M:%S")] = string.format('-' .. formatNumber((currentMoney - playerMoney)) .. ' $')
 					end
-					sessionSalary = earned + spended
+					daySalary = earned + spended
+					sessSalary = sessionEarn + sessionSpend
 					currentMoney = playerMoney
 				end
                 
@@ -187,34 +200,64 @@ function imgui.OnDrawFrame()
         imgui.ShowCursor = false
         imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		
-		imgui.Text(u8'Онлайн: ' .. calcOnline(0, 0))
-		
-		imgui.Separator()
-		
-		imgui.PushFont(fontsize)
-		imgui.Columns(2, nil, false)
-		imgui.SetColumnWidth(0, 60)
-		
-        imgui.Text(u8'Доход: ')
-        imgui.NextColumn()
-        imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), formatNumber(earned) .. u8' $') -- Зеленый
-		imgui.NextColumn()
-		
-        imgui.Text(u8'Расход: ')
-        imgui.NextColumn()
-        imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), formatNumber(spended) .. u8' $') -- Красный
-		imgui.NextColumn()
-		
-		imgui.Separator()
-		
-        imgui.Text(u8'Итог: ')
-        imgui.NextColumn()
-        imgui.TextColored(imgui.ImVec4(1, 0.84, 0, 1), formatNumber(sessionSalary) .. u8' $') -- Золотой
-		imgui.NextColumn()
-		
-		imgui.Columns(1)
-		imgui.PopFont()
-		
+		if widget_stat_mode.v then
+			imgui.Text(u8'Онлайн: ' .. calcOnline(0, 0))
+			
+			imgui.Separator()
+			
+			imgui.PushFont(fontsize)
+			imgui.Columns(2, nil, false)
+			imgui.SetColumnWidth(0, 60)
+			
+			imgui.Text(u8'Доход: ')
+			imgui.NextColumn()
+			imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), formatNumber(earned) .. u8' $') -- Зеленый
+			imgui.NextColumn()
+			
+			imgui.Text(u8'Расход: ')
+			imgui.NextColumn()
+			imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), formatNumber(spended) .. u8' $') -- Красный
+			imgui.NextColumn()
+			
+			imgui.Separator()
+			
+			imgui.Text(u8'Итог: ')
+			imgui.NextColumn()
+			imgui.TextColored(imgui.ImVec4(1, 0.84, 0, 1), formatNumber(daySalary) .. u8' $') -- Золотой
+			imgui.NextColumn()
+			
+			imgui.Columns(1)
+			imgui.PopFont()
+			
+		else
+			imgui.Text(u8'Онлайн(сессия): ' .. calcOnline(2, 0))
+			
+			imgui.Separator()
+			
+			imgui.PushFont(fontsize)
+			imgui.Columns(2, nil, false)
+			imgui.SetColumnWidth(0, 60)
+			
+			imgui.Text(u8'Доход: ')
+			imgui.NextColumn()
+			imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), formatNumber(sessionEarn) .. u8' $') -- Зеленый
+			imgui.NextColumn()
+			
+			imgui.Text(u8'Расход: ')
+			imgui.NextColumn()
+			imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), formatNumber(sessionSpend) .. u8' $') -- Красный
+			imgui.NextColumn()
+			
+			imgui.Separator()
+			
+			imgui.Text(u8'Итог: ')
+			imgui.NextColumn()
+			imgui.TextColored(imgui.ImVec4(1, 0.84, 0, 1), formatNumber(sessSalary) .. u8' $') -- Золотой
+			imgui.NextColumn()
+			
+			imgui.Columns(1)
+			imgui.PopFont()
+		end
         imgui.End()
     end
 
@@ -235,13 +278,55 @@ function imgui.OnDrawFrame()
 		end
 		imgui.SameLine()
 		if imgui.Button(u8'Настройки') then
-		tabN = 3
+			tabN = 3
 		end
 		
 		imgui.Separator()
 		
 		if tabN == 1 then
 			saveData()
+			
+			imgui.Text(u8'Общая статистика: ')
+			if imgui.Button(u8'Эта сессия') then
+				statTab = 1
+			end
+			
+			imgui.SameLine()
+			
+			if imgui.Button(u8'Неделя') then
+				statTab = 2
+			end
+			
+			imgui.SameLine()
+			
+			if imgui.Button(u8'Месяц') then
+				statTab = 3
+			end
+			
+			imgui.Separator()
+			
+			if statTab == 1 then
+				imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
+				imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
+				imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
+			end
+			
+			if statTab == 2 then
+				local stats = getWeekStats()
+				imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
+				imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
+				imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
+			end
+			
+			if statTab == 3 then 
+				local stats = getMonthStats()
+				imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.monthEarned) .. '$')
+				imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.monthSpended) .. '$')
+				imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.monthSalary) .. '$')
+			end
+			
+			imgui.Separator()
+			imgui.Text(u8'Подневная статистика: ')
 			
 			if next(data.salary) == nil then
 				imgui.Text(u8"Нет данных для отображения")
@@ -253,7 +338,7 @@ function imgui.OnDrawFrame()
 						imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
 						imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
 						imgui.Separator()						
-						imgui.Text(u8'Итог: ' .. formatNumber(stats.sessionSalary) .. u8' $')
+						imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
 					end
 				end
 			end
@@ -273,6 +358,14 @@ function imgui.OnDrawFrame()
             if imgui.Checkbox(u8"Включено", settings.widget_visible) then
 				widget_state.v = settings.widget_visible.v
 				data.settings.widget_visible = settings.widget_visible.v
+				saveData()
+			end
+			
+			imgui.Text(u8'Режим виджета (ВКЛ - День, ВЫКЛ - Сессия): ')
+            imgui.SameLine()
+            if imgui.Checkbox(u8"Днь", settings.widget_stat_mode) then
+				widget_stat_mode.v = settings.widget_stat_mode.v
+				data.settings.widget_stat_mode = settings.widget_stat_mode.v
 				saveData()
 			end
 			
@@ -334,8 +427,10 @@ function calcOnline(mode, prevOnline)
 	local totalTime
 	if mode == 0 then
 		totalTime = totalOnlineTime + sessionTime
-	else 
+	elseif mode == 1 then
 		totalTime = prevOnline or 0
+	else 
+		totalTime = sessionTime
 	end
     
     -- Конвертируем в часы, минуты, секунды
@@ -352,4 +447,46 @@ function onReceivePacket(id)
     if id == 32 then
 		thisScript():unload()
     end
+end
+
+function getWeekStats()
+    local currentDate = os.date("*t") -- Получаем текущую дату
+    local stats = {
+        weekEarned = 0,
+        weekSpended = 0,
+        weekSalary = 0
+    }
+
+    -- Проходим по последним 7 дням
+    for i = 0, 6 do
+        local date = os.date("%Y-%m-%d", os.time({year = currentDate.year, month = currentDate.month, day = currentDate.day}) - i * 86400)
+        if data.salary[date] then
+            stats.weekEarned = stats.weekEarned + (data.salary[date].earned or 0)
+            stats.weekSpended = stats.weekSpended + (data.salary[date].spended or 0)
+            stats.weekSalary = stats.weekSalary + (data.salary[date].daySalary or 0)
+        end
+    end
+
+    return stats
+end
+
+function getMonthStats()
+    local currentDate = os.date("*t") -- Получаем текущую дату
+    local stats = {
+        monthEarned = 0,
+        monthSpended = 0,
+        monthSalary = 0
+    }
+
+    -- Проходим по последним 30 дням
+    for i = 0, 29 do
+        local date = os.date("%Y-%m-%d", os.time({year = currentDate.year, month = currentDate.month, day = currentDate.day}) - i * 86400)
+        if data.salary[date] then
+            stats.monthEarned = stats.monthEarned + (data.salary[date].earned or 0)
+            stats.monthSpended = stats.monthSpended + (data.salary[date].spended or 0)
+            stats.monthSalary = stats.monthSalary + (data.salary[date].daySalary or 0)
+        end
+    end
+
+    return stats
 end

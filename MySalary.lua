@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.9")
+script_version("0.10.1")
 
 --Подключение библиотек
 require 'moonloader'
@@ -34,20 +34,20 @@ local tabN = 1
 local statTab = 1
 
 -- Переменные характеристик скрипта
-local widget_state = imgui.ImBool(false) -- Видимость виджета
+local widget_state = imgui.ImBool(true) -- Видимость виджета
 local main_window_state = imgui.ImBool(false) -- Видимость главного окна
-local widget_position = { x = 100, y = 100 } -- Позиция виджета
-local widget_size = { width = 150, height = 100 } -- Размер виджета
+local widget_position = { x = 1500, y = 190 } -- Позиция виджета
+local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.ImInt(14) -- Размер текста
-local widget_stat_mode = imgui.ImBool(false) -- Режим работы виджета (0 - сессия, 1 - день)
+local widget_stat_mode = imgui.ImBool(true) -- Режим работы виджета (0 - сессия, 1 - день)
 
 -- Настройки
 local settings = {
-    widget_visible = imgui.ImBool(false), -- Видимость виджета
-    widget_position = { x = imgui.ImInt(100), y = imgui.ImInt(100) }, -- Позиция виджета
-    widget_size = { width = imgui.ImInt(150), height = imgui.ImInt(100) }, -- Размер виджета
+    widget_visible = imgui.ImBool(true), -- Видимость виджета
+    widget_position = { x = imgui.ImInt(1500), y = imgui.ImInt(190) }, -- Позиция виджета
+    widget_size = { width = imgui.ImInt(200), height = imgui.ImInt(90) }, -- Размер виджета
 	widget_text_size = imgui.ImInt(14), -- Размер текста
-	widget_stat_mode = imgui.ImBool(false) -- Режим работы виджета (0 - сессия, 1 - день)
+	widget_stat_mode = imgui.ImBool(true) -- Режим работы виджета (0 - сессия, 1 - день)
 }
 
 -- Путь к JSON-файлу
@@ -57,11 +57,11 @@ local path = getWorkingDirectory() .. "\\config\\MySalary[Data].json"
 local data = {
     salary = {}, -- Таблица доходов
     settings = {
-        widget_visible = false,
-        widget_position = { x = 100, y = 100 },
-        widget_size = { width = 150, height = 100 },
+        widget_visible = true,
+        widget_position = { x = 1500, y = 190 },
+        widget_size = { width = 200, height = 90 },
 		widget_text_size = 14,
-		widget_stat_mode = false
+		widget_stat_mode = true
     },
     update_date = "" -- Последняя дата обновления
 }
@@ -96,17 +96,18 @@ function loadData()
     -- Загрузка настроек
     if data and data.settings then
         settings.widget_visible = imgui.ImBool(data.settings.widget_visible)
+		settings.widget_stat_mode = imgui.ImBool(data.settings.widget_stat_mode)
         settings.widget_position = {
-            x = imgui.ImInt(data.settings.widget_position.x or 100),
-            y = imgui.ImInt(data.settings.widget_position.y or 100)
+            x = imgui.ImInt(data.settings.widget_position.x or 1500),
+            y = imgui.ImInt(data.settings.widget_position.y or 190)
         }
         settings.widget_size = {
-            width = imgui.ImInt(data.settings.widget_size.width or 150),
-            height = imgui.ImInt(data.settings.widget_size.height or 100)
+            width = imgui.ImInt(data.settings.widget_size.width or 200),
+            height = imgui.ImInt(data.settings.widget_size.height or 90)
         }
 		settings.widget_text_size = imgui.ImInt(data.settings.widget_text_size or 10)
 		widget_state.v = settings.widget_visible.v
-		settings.widget_stat_mode = imgui.ImBool(data.settings.widget_stat_mode)
+		widget_stat_modeюм = settings.widget_stat_mode.v
     end
 end
 
@@ -124,6 +125,7 @@ function saveData()
     -- Сохранение настроек
     data.settings = {
         widget_visible = settings.widget_visible.v,
+		widget_stat_mode = settings.widget_stat_mode.v,
         widget_position = {
             x = settings.widget_position.x.v,
             y = settings.widget_position.y.v
@@ -132,8 +134,7 @@ function saveData()
             width = settings.widget_size.width.v,
             height = settings.widget_size.height.v
 		},
-		widget_text_size = settings.widget_text_size.v,
-		widget_stat_mode = settings.widget_stat_mode.v
+		widget_text_size = settings.widget_text_size.v
 	}
     local file = io.open(path, "w")
     file:write(encodeJson(data))
@@ -147,6 +148,7 @@ function main()
     loadData()
 	
     widget_state.v = settings.widget_visible.v -- Устанавливаем состояние виджета
+	widget_stat_mode.v = settings.widget_stat_mode.v
 	imgui.Process = true -- Запуск ImGui
 	while true do
         if sampIsLocalPlayerSpawned() then
@@ -200,7 +202,7 @@ function imgui.OnDrawFrame()
         imgui.ShowCursor = false
         imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		
-		if widget_stat_mode.v then
+		if settings.widget_stat_mode.v then
 			imgui.Text(u8'Онлайн: ' .. calcOnline(0, 0))
 			
 			imgui.Separator()
@@ -306,9 +308,27 @@ function imgui.OnDrawFrame()
 			imgui.Separator()
 			
 			if statTab == 1 then
+				imgui.Columns(2, nil, false)
 				imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
 				imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
 				imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
+				imgui.NextColumn()
+				imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
+				imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
+				imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. '$')
+				imgui.Columns(1)
+				if imgui.Button(u8'Очистить статистику за сессию') then
+					sessionEarn = 0
+					sessionSpend = 0
+					sessSalary = 0
+				end
+				imgui.SameLine()
+				if imgui.Button(u8'Очистить статистику за сегодня') then
+					earned = 0
+					spended = 0
+					daySalary = 0
+					saveData()
+				end
 			end
 			
 			if statTab == 2 then
@@ -320,9 +340,9 @@ function imgui.OnDrawFrame()
 			
 			if statTab == 3 then 
 				local stats = getMonthStats()
-				imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.monthEarned) .. '$')
-				imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.monthSpended) .. '$')
-				imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.monthSalary) .. '$')
+				imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
+				imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
+				imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
 			end
 			
 			imgui.Separator()
@@ -339,6 +359,12 @@ function imgui.OnDrawFrame()
 						imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
 						imgui.Separator()						
 						imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
+						if date ~= os.date("%Y-%m-%d") then
+							if imgui.Button(u8'Удалить день') then
+								data.salary[date] = nil
+								saveData()
+							end
+						end
 					end
 				end
 			end
@@ -395,6 +421,16 @@ function imgui.OnDrawFrame()
 				imgui.Process = false
 				thisScript():reload()
 			end
+			
+			imgui.Separator()
+			
+			if imgui.Button(u8'Очистить всю статистику') then
+				earned = 0
+				spended = 0
+				daySalary = 0
+				data.salary = {}
+				saveData()
+			end
 		end
         imgui.End()
     end
@@ -450,14 +486,13 @@ function onReceivePacket(id)
 end
 
 function getWeekStats()
-    local currentDate = os.date("*t") -- Получаем текущую дату
+    local currentDate = os.date("*t")
     local stats = {
         weekEarned = 0,
         weekSpended = 0,
         weekSalary = 0
     }
 
-    -- Проходим по последним 7 дням
     for i = 0, 6 do
         local date = os.date("%Y-%m-%d", os.time({year = currentDate.year, month = currentDate.month, day = currentDate.day}) - i * 86400)
         if data.salary[date] then
@@ -471,14 +506,13 @@ function getWeekStats()
 end
 
 function getMonthStats()
-    local currentDate = os.date("*t") -- Получаем текущую дату
+    local currentDate = os.date("*t")
     local stats = {
         monthEarned = 0,
         monthSpended = 0,
         monthSalary = 0
     }
 
-    -- Проходим по последним 30 дням
     for i = 0, 29 do
         local date = os.date("%Y-%m-%d", os.time({year = currentDate.year, month = currentDate.month, day = currentDate.day}) - i * 86400)
         if data.salary[date] then

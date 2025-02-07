@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.10.1")
+script_version("0.10.2")
 
 --Подключение библиотек
 require 'moonloader'
@@ -114,13 +114,28 @@ end
 -- Сохранение данных
 function saveData()
     local currentDate = getCurrentDate()
-    data.salary[currentDate] = {
+	
+	if data.salary[currentDate] then
+		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
         daySalary = daySalary,
 		totalOnlineTime = totalOnlineTime + gameClock()
     }
     data.update_date = currentDate
+	else
+		earned = 0
+		spended = 0
+		daySalary = 0
+		data.salary[currentDate] = {
+        earned = earned,
+        spended = spended,
+        daySalary = daySalary,
+		totalOnlineTime = totalOnlineTime + gameClock()
+    }
+    data.update_date = currentDate
+	end
+    
 
     -- Сохранение настроек
     data.settings = {

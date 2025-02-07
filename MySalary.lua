@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.10.2")
+script_version("0.11.0")
 
 --Подключение библиотек
 require 'moonloader'
@@ -20,6 +20,9 @@ local currentMoney = 0 -- Деньги записанные в скрипте
 local earned = 0 -- Получено денег
 local spended = 0 -- Потрачено денег
 local daySalary = 0 --Общий доход за день
+
+local payDayCount = 0 --Количество ПейДеев за день
+local lastPayDay = 0
 
 local sessionEarn = 0
 local sessionSpend = 0
@@ -86,11 +89,13 @@ function loadData()
         spended = data.salary[currentDate].spended or 0
         daySalary = data.salary[currentDate].daySalary or 0
 		totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
+		payDayCount = data.salary[currentDate].payDayCount or 0
     else
         earned = 0
         spended = 0
         daySalary = 0
 		totalOnlineTime = 0
+		payDayCount = 0
     end
 
     -- Загрузка настроек
@@ -114,12 +119,12 @@ end
 -- Сохранение данных
 function saveData()
     local currentDate = getCurrentDate()
-	
 	if data.salary[currentDate] then
 		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
         daySalary = daySalary,
+		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime + gameClock()
     }
     data.update_date = currentDate
@@ -131,12 +136,12 @@ function saveData()
         earned = earned,
         spended = spended,
         daySalary = daySalary,
+		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime + gameClock()
     }
     data.update_date = currentDate
 	end
     
-
     -- Сохранение настроек
     data.settings = {
         widget_visible = settings.widget_visible.v,
@@ -185,7 +190,7 @@ function main()
 					sessSalary = sessionEarn + sessionSpend
 					currentMoney = playerMoney
 				end
-                
+                countPayDay() -- Проверка PayDay
                 saveData() -- Сохранение данных при каждом изменении суммы
                 wait(0)
             end
@@ -331,7 +336,9 @@ function imgui.OnDrawFrame()
 				imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
 				imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
 				imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. '$')
+				imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
 				imgui.Columns(1)
+				
 				if imgui.Button(u8'Очистить статистику за сессию') then
 					sessionEarn = 0
 					sessionSpend = 0
@@ -342,6 +349,8 @@ function imgui.OnDrawFrame()
 					earned = 0
 					spended = 0
 					daySalary = 0
+					totalOnlineTime = 0
+					payDayCount = 0
 					saveData()
 				end
 			end
@@ -351,6 +360,7 @@ function imgui.OnDrawFrame()
 				imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
 				imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
 				imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
+				imgui.Text(u8'PayDay за неделю: ' .. stats.weekPayDay)
 			end
 			
 			if statTab == 3 then 
@@ -358,6 +368,7 @@ function imgui.OnDrawFrame()
 				imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
 				imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
 				imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
+				imgui.Text(u8'PayDay за месяц: ' .. stats.monthPayDay)
 			end
 			
 			imgui.Separator()
@@ -369,6 +380,7 @@ function imgui.OnDrawFrame()
 				for date, stats in pairs(data.salary) do
 					if imgui.CollapsingHeader(u8(date)) then
 						imgui.Text(u8'Онлайн за день: ' .. calcOnline(1, stats.totalOnlineTime))
+						imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
 						imgui.Separator()
 						imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
 						imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
@@ -443,6 +455,8 @@ function imgui.OnDrawFrame()
 				earned = 0
 				spended = 0
 				daySalary = 0
+				payDayCount = 0
+				totalOnlineTime = 0
 				data.salary = {}
 				saveData()
 			end
@@ -505,7 +519,8 @@ function getWeekStats()
     local stats = {
         weekEarned = 0,
         weekSpended = 0,
-        weekSalary = 0
+        weekSalary = 0,
+		weekPayDay = 0
     }
 
     for i = 0, 6 do
@@ -514,6 +529,7 @@ function getWeekStats()
             stats.weekEarned = stats.weekEarned + (data.salary[date].earned or 0)
             stats.weekSpended = stats.weekSpended + (data.salary[date].spended or 0)
             stats.weekSalary = stats.weekSalary + (data.salary[date].daySalary or 0)
+			stats.weekPayDay = stats.weekPayDay + (data.salary[date].payDayCount or 0)
         end
     end
 
@@ -525,7 +541,8 @@ function getMonthStats()
     local stats = {
         monthEarned = 0,
         monthSpended = 0,
-        monthSalary = 0
+        monthSalary = 0,
+		monthPayDAy = 0
     }
 
     for i = 0, 29 do
@@ -534,8 +551,18 @@ function getMonthStats()
             stats.monthEarned = stats.monthEarned + (data.salary[date].earned or 0)
             stats.monthSpended = stats.monthSpended + (data.salary[date].spended or 0)
             stats.monthSalary = stats.monthSalary + (data.salary[date].daySalary or 0)
+			stats.monthPayDAy = stats.monthPayDAy + (data.salary[date].payDayCount or 0)
         end
     end
 
     return stats
+end
+
+function countPayDay()
+	local currentOsTime = os.time(*t)
+	local now = os.time()
+	
+	if (time.min == 0 or time.min == 30) and (now - lastPayDay >= 1800) then
+		payDayCount = payDayCount + 1
+	end
 end

@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.11.0")
+script_version("0.11.1")
 
 --Подключение библиотек
 require 'moonloader'
@@ -542,7 +542,7 @@ function getMonthStats()
         monthEarned = 0,
         monthSpended = 0,
         monthSalary = 0,
-		monthPayDAy = 0
+		monthPayDay = 0
     }
 
     for i = 0, 29 do
@@ -551,7 +551,7 @@ function getMonthStats()
             stats.monthEarned = stats.monthEarned + (data.salary[date].earned or 0)
             stats.monthSpended = stats.monthSpended + (data.salary[date].spended or 0)
             stats.monthSalary = stats.monthSalary + (data.salary[date].daySalary or 0)
-			stats.monthPayDAy = stats.monthPayDAy + (data.salary[date].payDayCount or 0)
+			stats.monthPayDay = stats.monthPayDay + (data.salary[date].payDayCount or 0)
         end
     end
 
@@ -559,10 +559,13 @@ function getMonthStats()
 end
 
 function countPayDay()
-	local currentOsTime = os.time(*t)
-	local now = os.time()
-	
-	if (time.min == 0 or time.min == 30) and (now - lastPayDay >= 1800) then
-		payDayCount = payDayCount + 1
-	end
+    local currentOsTime = os.date("*t") -- ? os.date("*t") возвращает таблицу
+    local now = os.time() -- ? os.time() без аргументов возвращает текущее время
+
+    -- Проверяем минуту
+    if (currentOsTime.min == 0 or currentOsTime.min == 30) and (now - lastPayDay >= 1800) then
+        payDayCount = payDayCount + 1
+        lastPayDay = now -- Обновляем время последней зарплаты
+        --print("Зарплата начислена! Общее количество:", payDayCount)
+    end
 end

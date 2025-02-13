@@ -1,7 +1,7 @@
 --Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.11.1")
+script_version("0.11.2")
 
 --Подключение библиотек
 require 'moonloader'
@@ -132,6 +132,7 @@ function saveData()
 		earned = 0
 		spended = 0
 		daySalary = 0
+		totalOnlineTime = 0
 		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
@@ -477,8 +478,9 @@ end
 
 -- Форматирование чисел
 function formatNumber(n)
-    local formatted = tostring(n):reverse():gsub("(%d%d%d)", "%1."):reverse()
-    return formatted:gsub("^%.", "") -- Убираем лишнюю точку в начале, если число < 1000
+    local sign = n < 0 and "-" or ""  -- Проверяем знак
+    local formatted = tostring(math.abs(n)):reverse():gsub("(%d%d%d)", "%1."):reverse()
+    return sign .. formatted:gsub("^%.", "") -- Добавляем знак обратно
 end
 
 -- Функция для получения текущей даты

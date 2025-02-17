@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.12.0")
+script_version("0.13.0")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -13,6 +13,12 @@ local ffi = require 'ffi'
 -- Кодировка
 encoding.default = 'CP1251'
 u8 = encoding.UTF8
+
+--Обновления
+local updateURL = "https://api.github.com/repos/xienor/My-Salary-SAMP/releases"
+local updateWindowState = imgui.new.bool(false)
+local isJsonLoaded = false
+local releasesData = {}
 
 -- Глобальные переменные
 local lastOperations = {}
@@ -462,6 +468,12 @@ local mainWindow = imgui.OnFrame(
             end
 
             imgui.Separator()
+			
+			if imgui.Button(u8"Проверить обновления") then
+				updateWindowState[0] = not updateWindowState[0]
+			end
+			
+			imgui.Separator()
 
             if imgui.Button(u8'Очистить всю статистику') then
                 earned = 0
@@ -602,3 +614,63 @@ function countPayDay()
         lastPayDay = now
     end
 end
+
+local function fetchReleaseData()
+    downloadUrlToFile(updateURL, "MySalaryReleases.json", function(_, status)
+        if status == require("moonloader").download_status.STATUSEX_ENDDOWNLOAD then
+            local file = io.open("MySalaryReleases.json", "r")
+            if file then
+                releasesData = decodeJson(file:read("*a")) or {}
+                file:close()
+                isJsonLoaded = true
+            else
+                print("Ошибка: Не удалось открыть MySalaryReleases.json")
+            end
+        end
+    end)
+end
+
+fetchReleaseData()
+
+local updateWindow = imgui.OnFrame(
+    function() return updateWindowState[0] end,
+    function(player)
+        imgui.Begin(u8'MySalary: Обновление', updateWindowState, imgui.WindowFlags.NoCollapse)
+        player.HideCursor = false
+        -- Проверяем, загружены ли данные
+		imgui.Text(u8" Установленная версия: " .. thisScript().version)
+        if not isJsonLoaded then
+            imgui.Text(u8"Загрузка обновлений...")
+        else
+            for _, release in ipairs(releasesData) do
+                if imgui.CollapsingHeader(u8(release.tag_name)) then
+                    imgui.Text(u8"Версия: " .. release.tag_name)
+                    imgui.Text(u8"Дата выпуска: " .. release.published_at)
+                    imgui.Text(u8"Что нового: " .. release.body)
+                    
+                    for _, asset in ipairs(release.assets or {}) do
+                        if imgui.Button(u8"Скачать " .. asset.name) then
+                            local verUrl = asset.browser_download_url
+                            local tempPath = thisScript().path .. ".new"
+
+                            downloadUrlToFile(verUrl, tempPath, function(_, status)
+                                if status == require("moonloader").download_status.STATUSEX_ENDDOWNLOAD then
+                                    if doesFileExist(tempPath) then
+                                        os.remove(thisScript().path)
+                                        os.rename(tempPath, thisScript().path)
+                                        thisScript():reload()
+                                    else
+                                        print("Ошибка: не удалось скачать файл...")
+                                    end
+                                end
+                            end)
+                        end
+                    end
+                end
+            end
+        end
+
+        imgui.End()
+    end
+)
+

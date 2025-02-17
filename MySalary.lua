@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.0")
+script_version("0.13.1")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -621,6 +621,13 @@ local function fetchReleaseData()
             local file = io.open("MySalaryReleases.json", "r")
             if file then
                 releasesData = decodeJson(file:read("*a")) or {}
+				local latestRelease = releasesData[1]
+				local latestVersion = latestRelease.tag_name
+				if latestVersion ~= thisScript().version then
+					sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Доступна новая версия! Обновиться можно в настройках.", 0xFFFFFF)
+				else
+					sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}У вас установлена самая последняя версия.", 0xFFFFFF)
+				end
                 file:close()
                 isJsonLoaded = true
             else

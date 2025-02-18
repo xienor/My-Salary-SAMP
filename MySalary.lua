@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.3")
+script_version("0.13.5")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -267,7 +267,7 @@ local widget = imgui.OnFrame(
 		imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1, 1, 1, settings.widgetAlpha[0]))
 		imgui.PushStyleColor(imgui.Col.Separator, imgui.ImVec4(1, 1, 1, settings.widgetAlpha[0]))
 		--imgui.SetNextWindowBorderAlpha(0.0)
-		imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
+		imgui.Begin(u8'My Salary: Виджет', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		player.HideCursor = true
         if settings.widget_stat_mode[0] then
             imgui.Text(u8'Онлайн: ' .. calcOnline(0, 0))
@@ -338,7 +338,7 @@ local mainWindow = imgui.OnFrame(
 	function() return main_window_state[0] end,
 	function(player)
 		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
-        imgui.Begin('My Salary Main Window', main_window_state, imgui.WindowFlags.NoCollapse)
+        imgui.Begin(u8'My Salary: Главное окно', main_window_state, imgui.WindowFlags.NoCollapse)
 		player.HideCursor = false
         if imgui.Button(u8'Статистика') then
             tabN = 1
@@ -377,31 +377,31 @@ local mainWindow = imgui.OnFrame(
             imgui.Separator()
 
             if statTab == 1 then
-                imgui.Columns(2, nil, false)
-                imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
-                imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
-                imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
-                imgui.NextColumn()
-                imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
-                imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
-                imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
-                imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
-                imgui.Columns(1)
+				imgui.Columns(2, nil, false)
+				imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
+				imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
+				imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
+				imgui.NextColumn()
+				imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
+				imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
+				imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
+				imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
+				imgui.Columns(1)
 
-                if imgui.Button(u8'Очистить статистику за сессию') then
-                    sessionEarn = 0
-                    sessionSpend = 0
-                    sessSalary = 0
-                end
-                imgui.SameLine()
-                if imgui.Button(u8'Очистить статистику за сегодня') then
-                    earned = 0
-                    spended = 0
-                    daySalary = 0
-                    totalOnlineTime = 0
-                    payDayCount = 0
-                    saveData()
-                end
+				if imgui.Button(u8'Очистить статистику за сессию') then
+					sessionEarn = 0
+					sessionSpend = 0
+					sessSalary = 0
+				end
+				imgui.SameLine()
+				if imgui.Button(u8'Очистить статистику за сегодня') then
+					earned = 0
+					spended = 0
+					daySalary = 0
+					totalOnlineTime = 0
+					payDayCount = 0
+					saveData()
+				end
             end
 
             if statTab == 2 then
@@ -421,37 +421,40 @@ local mainWindow = imgui.OnFrame(
             end
 
             imgui.Separator()
-            imgui.Text(u8'Подневная статистика: ')
+			if imgui.BeginChild("allStats") then
+				imgui.Text(u8'Подневная статистика: ')
 
-			if next(data.salary) == nil then
-				imgui.Text(u8"Нет данных для отображения")
-			else
-				-- Получаем и сортируем даты в порядке убывания (сначала новые)
-				local sortedDates = {}
-				for date in pairs(data.salary) do
-					table.insert(sortedDates, date)
-				end
-				table.sort(sortedDates, function(a, b) return a > b end) -- Сортировка от новых к старым
+				if next(data.salary) == nil then
+					imgui.Text(u8"Нет данных для отображения")
+				else
+					-- Получаем и сортируем даты в порядке убывания (сначала новые)
+					local sortedDates = {}
+					for date in pairs(data.salary) do
+						table.insert(sortedDates, date)
+					end
+					table.sort(sortedDates, function(a, b) return a > b end) -- Сортировка от новых к старым
 
-				-- Перебираем уже отсортированные даты
-				for _, date in ipairs(sortedDates) do
-					local stats = data.salary[date]
-					if imgui.CollapsingHeader(u8(date)) then
-						imgui.Text(u8'Онлайн за день: ' .. calcOnline(1, stats.totalOnlineTime))
-						imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
-						imgui.Separator()
-						imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
-						imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
-						imgui.Separator()
-						imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
-						if date ~= os.date("%Y-%m-%d") then
-							if imgui.Button(u8'Удалить день') then
-								data.salary[date] = nil
-								saveData()
+					-- Перебираем уже отсортированные даты
+					for _, date in ipairs(sortedDates) do
+						local stats = data.salary[date]
+						if imgui.CollapsingHeader(u8(date)) then
+							imgui.Text(u8'Онлайн за день: ' .. calcOnline(1, stats.totalOnlineTime))
+							imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
+							imgui.Separator()
+							imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
+							imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
+							imgui.Separator()
+							imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
+							if date ~= os.date("%Y-%m-%d") then
+								if imgui.Button(u8'Удалить день') then
+									data.salary[date] = nil
+									saveData()
+								end
 							end
 						end
 					end
 				end
+			imgui.EndChild()
 			end
         end
 
@@ -693,6 +696,8 @@ fetchReleaseData()
 local updateWindow = imgui.OnFrame(
     function() return updateWindowState[0] end,
     function(player)
+		imgui.SetNextWindowSize(imgui.ImVec2(400, 300), imgui.Cond.FirstUseEver)
+		imgui.PushStyleColor(imgui.Col.TitleBgActive, imgui.ImVec4(0.48, 0.16, 0.16, 1.0))
         imgui.Begin(u8'MySalary: Обновление', updateWindowState, imgui.WindowFlags.NoCollapse)
         player.HideCursor = false
         -- Проверяем, загружены ли данные
@@ -727,7 +732,7 @@ local updateWindow = imgui.OnFrame(
                 end
             end
         end
-
+		imgui.PopStyleColor()
         imgui.End()
     end
 )

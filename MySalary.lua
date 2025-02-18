@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.2")
+script_version("0.13.3")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -45,6 +45,7 @@ local statTab = 1
 local hidden = imgui.new.bool(false)
 local wasCursorActive = false
 
+
 local wm = require 'windows.message'    -- Список событий для окна игры
 
 local new = imgui.new
@@ -57,6 +58,7 @@ local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.new.int(14) -- Размер текста
 local widget_stat_mode = imgui.new.bool(true) -- Режим работы виджета (0 - сессия, 1 - день)
 local hideWidgetWhenCursor = imgui.new.bool(false)
+local widgetAlpha = imgui.new.float(1.0)
 
 -- Настройки
 local settings = {
@@ -65,7 +67,8 @@ local settings = {
     widget_position = { x = imgui.new.int(1500), y = imgui.new.int(190) }, -- Позиция виджета
     widget_size = { width = imgui.new.int(200), height = imgui.new.int(90) }, -- Размер виджета
     widget_text_size = imgui.new.int(14), -- Размер текста
-    widget_stat_mode = imgui.new.bool(true) -- Режим работы виджета (0 - сессия, 1 - день)
+    widget_stat_mode = imgui.new.bool(true), -- Режим работы виджета (0 - сессия, 1 - день)
+	widgetAlpha = imgui.new.float(1.0)
 }
 
 -- Путь к JSON-файлу
@@ -80,7 +83,8 @@ local data = {
         widget_position = { x = 1500, y = 190 },
         widget_size = { width = 200, height = 90 },
         widget_text_size = 14,
-        widget_stat_mode = true
+        widget_stat_mode = true,
+		widgetAlpha = 1.0
     },
     update_date = "" -- Последняя дата обновления
 }
@@ -119,6 +123,7 @@ function loadData()
         settings.widget_visible = imgui.new.bool(data.settings.widget_visible)
         settings.widget_stat_mode =  imgui.new.bool(data.settings.widget_stat_mode)
 		settings.hideWidgetWhenCursor = imgui.new.bool(data.settings.hideWidgetWhenCursor)
+		settings.widgetAlpha = imgui.new.float(data.settings.widgetAlpha)
 		
         settings.widget_position = {
             x = imgui.new.int(data.settings.widget_position.x or 1500),
@@ -167,6 +172,7 @@ function saveData()
         widget_visible = settings.widget_visible[0],
         widget_stat_mode = settings.widget_stat_mode[0],
 		hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0],
+		widgetAlpha = settings.widgetAlpha[0],
         widget_position = {
             x = settings.widget_position.x[0],
             y = settings.widget_position.y[0]
@@ -255,6 +261,11 @@ local widget = imgui.OnFrame(
 	function(player)
 		imgui.SetNextWindowPos(imgui.ImVec2(settings.widget_position.x[0], settings.widget_position.y[0]), imgui.Cond.Always)
         imgui.SetNextWindowSize(imgui.ImVec2(settings.widget_size.width[0], settings.widget_size.height[0]), imgui.Cond.Always)
+		imgui.SetNextWindowBgAlpha(settings.widgetAlpha[0])
+		imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(1, 1, 1, 0))
+		imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1, 1, 1, settings.widgetAlpha[0]))
+		imgui.PushStyleColor(imgui.Col.Separator, imgui.ImVec4(1, 1, 1, settings.widgetAlpha[0]))
+		--imgui.SetNextWindowBorderAlpha(0.0)
 		imgui.Begin('My Salary', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		player.HideCursor = true
         if settings.widget_stat_mode[0] then
@@ -268,19 +279,19 @@ local widget = imgui.OnFrame(
 
             imgui.Text(u8'Доход: ')
             imgui.NextColumn()
-            imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), formatNumber(earned) .. u8' $') -- Зеленый
+            imgui.TextColored(imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0]), formatNumber(earned) .. u8' $') -- Зеленый
             imgui.NextColumn()
 
             imgui.Text(u8'Расход: ')
             imgui.NextColumn()
-            imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), formatNumber(spended) .. u8' $') -- Красный
+            imgui.TextColored(imgui.ImVec4(1, 0, 0, settings.widgetAlpha[0]), formatNumber(spended) .. u8' $') -- Красный
             imgui.NextColumn()
 
             imgui.Separator()
 
             imgui.Text(u8'Итог: ')
             imgui.NextColumn()
-            imgui.TextColored(imgui.ImVec4(1, 0.84, 0, 1), formatNumber(daySalary) .. u8' $') -- Золотой
+            imgui.TextColored(imgui.ImVec4(1, 0.84, 0, settings.widgetAlpha[0]), formatNumber(daySalary) .. u8' $') -- Золотой
             imgui.NextColumn()
 
             imgui.Columns(1)
@@ -296,24 +307,28 @@ local widget = imgui.OnFrame(
 
             imgui.Text(u8'Доход: ')
             imgui.NextColumn()
-            imgui.TextColored(imgui.ImVec4(0, 1, 0, 1), formatNumber(sessionEarn) .. u8' $') -- Зеленый
+            imgui.TextColored(imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0]), formatNumber(sessionEarn) .. u8' $') -- Зеленый
             imgui.NextColumn()
 
             imgui.Text(u8'Расход: ')
             imgui.NextColumn()
-            imgui.TextColored(imgui.ImVec4(1, 0, 0, 1), formatNumber(sessionSpend) .. u8' $') -- Красный
+            imgui.TextColored(imgui.ImVec4(1, 0, 0, settings.widgetAlpha[0]), formatNumber(sessionSpend) .. u8' $') -- Красный
             imgui.NextColumn()
 
             imgui.Separator()
 
             imgui.Text(u8'Итог: ')
             imgui.NextColumn()
-            imgui.TextColored(imgui.ImVec4(1, 0.84, 0, 1), formatNumber(sessSalary) .. u8' $') -- Золотой
+            imgui.TextColored(imgui.ImVec4(1, 0.84, 0, settings.widgetAlpha[0]), formatNumber(sessSalary) .. u8' $') -- Золотой
             imgui.NextColumn()
 
             imgui.Columns(1)
             imgui.PopFont()
+			imgui.PopStyleColor()
         end
+		imgui.PopStyleColor() -- Текст
+		imgui.PopStyleColor() -- Рамка
+		imgui.PopStyleColor() -- Разделители
         imgui.End()
     end
 )
@@ -484,6 +499,11 @@ local mainWindow = imgui.OnFrame(
             imgui.SliderInt(u8"Высота", settings.widget_size.height, 50, 300)
 
             imgui.Separator()
+
+			imgui.Text(u8"Прозрачность виджета: ")
+			imgui.SliderFloat(u8"0-1", settings.widgetAlpha, 0.0, 1.0)
+			
+			imgui.Separator()
 
             imgui.Text(u8'Размер шрифта')
             imgui.SliderInt(u8"Размер", settings.widget_text_size, 5, 20)

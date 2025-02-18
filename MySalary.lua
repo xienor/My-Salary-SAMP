@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.5")
+script_version("0.13.5.1")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -120,10 +120,10 @@ function loadData()
 
     -- Загрузка настроек
     if data and data.settings then
-        settings.widget_visible = imgui.new.bool(data.settings.widget_visible)
-        settings.widget_stat_mode =  imgui.new.bool(data.settings.widget_stat_mode)
-		settings.hideWidgetWhenCursor = imgui.new.bool(data.settings.hideWidgetWhenCursor)
-		settings.widgetAlpha = imgui.new.float(data.settings.widgetAlpha)
+        settings.widget_visible = imgui.new.bool(data.settings.widget_visible or true) 
+        settings.widget_stat_mode =  imgui.new.bool(data.settings.widget_stat_mode or true) 
+		settings.hideWidgetWhenCursor = imgui.new.bool(data.settings.hideWidgetWhenCursor or false)
+		settings.widgetAlpha = imgui.new.float(data.settings.widgetAlpha or 1.0) 
 		
         settings.widget_position = {
             x = imgui.new.int(data.settings.widget_position.x or 1500),

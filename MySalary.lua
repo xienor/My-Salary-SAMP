@@ -137,6 +137,7 @@ function loadData()
         settings.widget_text_size = imgui.new.int(data.settings.widget_text_size or 10)
         widget_state[0] = settings.widget_visible[0]
         widget_stat_mode[0]= settings.widget_stat_mode[0]
+		hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
     end
 end
 
@@ -324,7 +325,7 @@ local widget = imgui.OnFrame(
 
             imgui.Columns(1)
             imgui.PopFont()
-			imgui.PopStyleColor()
+			--imgui.PopStyleColor()
         end
 		imgui.PopStyleColor() -- Текст
 		imgui.PopStyleColor() -- Рамка
@@ -482,7 +483,7 @@ local mainWindow = imgui.OnFrame(
 			imgui.SameLine()
 			if imgui.Checkbox(u8"Скрывать", settings.hideWidgetWhenCursor) then
                 hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
-                data.shideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
+                data.settings.hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
                 saveData()
             end
 

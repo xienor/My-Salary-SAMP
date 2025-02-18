@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.1")
+script_version("0.13.2")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -42,6 +42,8 @@ local timeHours = 0 -- Онлайн часов
 
 local tabN = 1
 local statTab = 1
+local hidden = imgui.new.bool(false)
+local wasCursorActive = false
 
 local wm = require 'windows.message'    -- Список событий для окна игры
 
@@ -54,9 +56,11 @@ local widget_position = { x = 1500, y = 190 } -- Позиция виджета
 local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.new.int(14) -- Размер текста
 local widget_stat_mode = imgui.new.bool(true) -- Режим работы виджета (0 - сессия, 1 - день)
+local hideWidgetWhenCursor = imgui.new.bool(false)
 
 -- Настройки
 local settings = {
+	hideWidgetWhenCursor = imgui.new.bool(false),
     widget_visible = imgui.new.bool(true), -- Видимость виджета
     widget_position = { x = imgui.new.int(1500), y = imgui.new.int(190) }, -- Позиция виджета
     widget_size = { width = imgui.new.int(200), height = imgui.new.int(90) }, -- Размер виджета
@@ -71,6 +75,7 @@ local path = getWorkingDirectory() .. "\\config\\MySalary[Data].json"
 local data = {
     salary = {}, -- Таблица доходов
     settings = {
+		hideWidgetWhenCursor = false,
         widget_visible = true,
         widget_position = { x = 1500, y = 190 },
         widget_size = { width = 200, height = 90 },
@@ -113,6 +118,7 @@ function loadData()
     if data and data.settings then
         settings.widget_visible = imgui.new.bool(data.settings.widget_visible)
         settings.widget_stat_mode =  imgui.new.bool(data.settings.widget_stat_mode)
+		settings.hideWidgetWhenCursor = imgui.new.bool(data.settings.hideWidgetWhenCursor)
 		
         settings.widget_position = {
             x = imgui.new.int(data.settings.widget_position.x or 1500),
@@ -124,7 +130,7 @@ function loadData()
             height = imgui.new.int(data.settings.widget_size.height or 90)
         }
         settings.widget_text_size = imgui.new.int(data.settings.widget_text_size or 10)
-        widget_state[0]= settings.widget_visible[0]
+        widget_state[0] = settings.widget_visible[0]
         widget_stat_mode[0]= settings.widget_stat_mode[0]
     end
 end
@@ -160,6 +166,7 @@ function saveData()
     data.settings = {
         widget_visible = settings.widget_visible[0],
         widget_stat_mode = settings.widget_stat_mode[0],
+		hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0],
         widget_position = {
             x = settings.widget_position.x[0],
             y = settings.widget_position.y[0]
@@ -204,6 +211,22 @@ function main()
 					daySalary = earned + spended
 					sessSalary = sessionEarn + sessionSpend
 					currentMoney = playerMoney
+					if hideWidgetWhenCursor[0] == true then
+						local isCursorActive = sampIsCursorActive()
+						if isCursorActive ~= wasCursorActive then
+							wasCursorActive = isCursorActive -- Обновляем предыдущее состояние
+						if isCursorActive then
+							widget_state[0] = false
+							hidden =  new.bool(true)
+						else
+							widget_state[0] = hidden[0]
+							hidden = new.bool(false)
+						end
+					end
+					end
+					--local result1, button1, list1, input1 = sampHasDialogRespond(1)
+					--local id = sampGetCurrentDialogId()
+					--print(id)
 				end
                 countPayDay() -- Проверка PayDay
                 saveData() -- Сохранение данных при каждом изменении суммы
@@ -438,6 +461,13 @@ local mainWindow = imgui.OnFrame(
             if imgui.Checkbox(u8"День", settings.widget_stat_mode) then
                 widget_stat_mode[0] = settings.widget_stat_mode[0]
                 data.settings.widget_stat_mode = settings.widget_stat_mode[0]
+                saveData()
+            end
+			imgui.Text(u8'Скрывать виджет при активном курсоре (инвентарь, чат...)')
+			imgui.SameLine()
+			if imgui.Checkbox(u8"Скрывать", settings.hideWidgetWhenCursor) then
+                hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
+                data.shideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
                 saveData()
             end
 

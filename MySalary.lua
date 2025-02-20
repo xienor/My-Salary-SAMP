@@ -45,6 +45,11 @@ local statTab = 1
 local hidden = imgui.new.bool(false)
 local wasCursorActive = false
 
+local startTime = 0
+local nowTime = 0
+local onlineTime = 0
+local afkTime = 0
+
 
 local wm = require 'windows.message'    -- Список событий для окна игры
 
@@ -150,7 +155,7 @@ function saveData()
         spended = spended,
         daySalary = daySalary,
 		payDayCount = payDayCount,
-		totalOnlineTime = totalOnlineTime + gameClock()
+		totalOnlineTime = totalOnlineTime
     }
     data.update_date = currentDate
 	else
@@ -158,12 +163,14 @@ function saveData()
 		spended = 0
 		daySalary = 0
 		totalOnlineTime = 0
+		payDayCount = 0
 		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
         daySalary = daySalary,
 		payDayCount = payDayCount,
-		totalOnlineTime = totalOnlineTime + gameClock()
+		totalOnlineTime = totalOnlineTime,
+		payDayCount = payDayCount
     }
     data.update_date = currentDate
 	end
@@ -195,6 +202,8 @@ function main()
     while not isSampAvailable() do wait(0) end
     sampRegisterChatCommand("msalary", openMainWindow)
     loadData()
+	startTime = os.time()
+	calcOnline()
 
     widget_state[0]= settings.widget_visible[0]-- Устанавливаем состояние виджета
     widget_stat_mode[0]= settings.widget_stat_mode[0]
@@ -237,6 +246,7 @@ function main()
 				end
                 countPayDay() -- Проверка PayDay
                 saveData() -- Сохранение данных при каждом изменении суммы
+				calcOnline()
                 wait(0)
             end
         end
@@ -270,7 +280,7 @@ local widget = imgui.OnFrame(
 		imgui.Begin(u8'My Salary: Виджет', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		player.HideCursor = true
         if settings.widget_stat_mode[0] then
-            imgui.Text(u8'Онлайн: ' .. calcOnline(0, 0))
+            imgui.Text(u8'Онлайн: ' .. formatTime(0, 0))
 
             imgui.Separator()
 
@@ -298,7 +308,7 @@ local widget = imgui.OnFrame(
             imgui.Columns(1)
             imgui.PopFont()
         else
-            imgui.Text(u8'Онлайн(сессия): ' .. calcOnline(2, 0))
+            imgui.Text(u8'Онлайн(сессия): ' .. formatTime(2, 0))
 
             imgui.Separator()
 
@@ -438,7 +448,7 @@ local mainWindow = imgui.OnFrame(
 					for _, date in ipairs(sortedDates) do
 						local stats = data.salary[date]
 						if imgui.CollapsingHeader(u8(date)) then
-							imgui.Text(u8'Онлайн за день: ' .. calcOnline(1, stats.totalOnlineTime))
+							imgui.Text(u8'Онлайн за день: ' .. formatTime(1, stats.totalOnlineTime))
 							imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
 							imgui.Separator()
 							imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
@@ -589,25 +599,45 @@ function getCurrentDate()
     return os.date("%Y-%m-%d")
 end
 
-function calcOnline(mode, prevOnline)
-    local sessionTime = gameClock()
+function calcOnline()
+	local oldOnline = onlineTime
+	local oldAfk = afkTime
+	
+	onlineTime = os.time() - startTime
+	afkTime = os.clock() - gameClock()
+	
+	if afkTime < 0 then
+		afkTime = 0
+		oldAfk = 0
+	end
+	
+	if (totalOnlineTime + (onlineTime - oldOnline) - (afkTime - oldAfk)) > totalOnlineTime then
+		totalOnlineTime = totalOnlineTime + (onlineTime - oldOnline) - (afkTime - oldAfk)
+	end
+	
+	curT = os.date("*t")
+	if curT.hour == 0 and curT.min == 0 and curT.sec == 0 then
+		totalOnlineTime = 0
+	end
+end
 
-    local totalTime
-    if mode == 0 then
-        totalTime = totalOnlineTime + sessionTime
-    elseif mode == 1 then
-        totalTime = prevOnline or 0
-    else
-        totalTime = sessionTime
-    end
+function formatTime(mode, vremya)
 
-    local timeHours = math.floor(totalTime / 3600)
-    local remaining = totalTime % 3600
+	if mode == 0 then
+		oTime = totalOnlineTime
+	elseif mode == 1 then
+		oTime = vremya or 0
+	else 
+		oTime = gameClock()
+	end
+	
+	local timeHours = math.floor(oTime / 3600)
+    local remaining = oTime % 3600
     local timeMins = math.floor(remaining / 60)
     local timeSecs = remaining % 60
 
     return string.format("%02d:%02d:%02d", timeHours, timeMins, timeSecs)
-end
+	end
 
 function onReceivePacket(id)
     if id == 32 then
@@ -732,6 +762,7 @@ local updateWindow = imgui.OnFrame(
                 end
             end
         end
+		--os.remove("\\moonloader\\config\\MySalaryReleases.json")
 		imgui.PopStyleColor()
         imgui.End()
     end

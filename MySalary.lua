@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.5.1")
+script_version("0.13.7")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -9,6 +9,7 @@ local imgui = require 'mimgui' -- Используем mimgui
 local events = require 'lib.samp.events'
 local encoding = require 'encoding'
 local ffi = require 'ffi'
+local wm = require 'windows.message'    -- Список событий для окна игры
 
 -- Кодировка
 encoding.default = 'CP1251'
@@ -21,38 +22,38 @@ local isJsonLoaded = false
 local releasesData = {}
 
 -- Глобальные переменные
-local lastOperations = {}
 local playerMoney = 0 -- Деньги у игрока
 local currentMoney = 0 -- Деньги записанные в скрипте
 local earned = 0 -- Получено денег
 local spended = 0 -- Потрачено денег
 local daySalary = 0 -- Общий доход за день
 
+local lastOperations = {}
+
 local payDayCount = 0 -- Количество PayDay за день
 local lastPayDay = 0
 
-local sessionEarn = 0
+local sessionEarn = 0 -- Сессия
 local sessionSpend = 0
 local sessSalary = 0
 
+-- Время
 local totalOnlineTime = 0 -- Общий онлайн за день
-local timeSecs = 0 -- Онлайн секунд
-local timeMins = 0 -- Онлайн минут
-local timeHours = 0 -- Онлайн часов
-
-local tabN = 1
-local statTab = 1
-local hidden = imgui.new.bool(false)
-local wasCursorActive = false
-
 local startTime = 0
 local nowTime = 0
 local onlineTime = 0
 local afkTime = 0
+local timeSecs = 0 -- Онлайн секунд
+local timeMins = 0 -- Онлайн минут
+local timeHours = 0 -- Онлайн часов
 
+-- Вкладки
+local tabN = 1
+local statTab = 1
 
-local wm = require 'windows.message'    -- Список событий для окна игры
-
+-- Настройки
+local hidden = imgui.new.bool(false)
+local wasCursorActive = false
 local new = imgui.new
 
 -- Переменные характеристик скрипта
@@ -170,7 +171,6 @@ function saveData()
         daySalary = daySalary,
 		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime,
-		payDayCount = payDayCount
     }
     data.update_date = currentDate
 	end
@@ -201,6 +201,7 @@ end
 function main()
     while not isSampAvailable() do wait(0) end
     sampRegisterChatCommand("msalary", openMainWindow)
+	
     loadData()
 	startTime = os.time()
 	calcOnline()
@@ -240,9 +241,6 @@ function main()
 						end
 					end
 					end
-					--local result1, button1, list1, input1 = sampHasDialogRespond(1)
-					--local id = sampGetCurrentDialogId()
-					--print(id)
 				end
                 countPayDay() -- Проверка PayDay
                 saveData() -- Сохранение данных при каждом изменении суммы
@@ -251,9 +249,6 @@ function main()
             end
         end
         wait(0)
-		-- if not main_window_state[0] then
-        -- imgui.ShowCursor = false
-		-- end
     end
 end
 
@@ -276,7 +271,6 @@ local widget = imgui.OnFrame(
 		imgui.PushStyleColor(imgui.Col.Border, imgui.ImVec4(1, 1, 1, 0))
 		imgui.PushStyleColor(imgui.Col.Text, imgui.ImVec4(1, 1, 1, settings.widgetAlpha[0]))
 		imgui.PushStyleColor(imgui.Col.Separator, imgui.ImVec4(1, 1, 1, settings.widgetAlpha[0]))
-		--imgui.SetNextWindowBorderAlpha(0.0)
 		imgui.Begin(u8'My Salary: Виджет', widget_state, imgui.WindowFlags.NoTitleBar + imgui.WindowFlags.NoResize)
 		player.HideCursor = true
         if settings.widget_stat_mode[0] then
@@ -335,7 +329,6 @@ local widget = imgui.OnFrame(
 
             imgui.Columns(1)
             imgui.PopFont()
-			--imgui.PopStyleColor()
         end
 		imgui.PopStyleColor() -- Текст
 		imgui.PopStyleColor() -- Рамка
@@ -527,7 +520,6 @@ local mainWindow = imgui.OnFrame(
                 saveData()
                 sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт будет перезагружен...", 0xFFFFFF)
                 main_window_state[0] = false
-                --showCursor(false, false)
                 thisScript():reload()
             end
 
@@ -555,32 +547,6 @@ local mainWindow = imgui.OnFrame(
 		end
     end
 )
-    -- Если оба окна закрыты, скрываем курсор
-    -- if not main_window_state[0] then
-        -- imgui.ShowCursor = false
-    -- end
--- end
-
-
-
--- Рендеринг GUI
--- function renderGUI()
-    -- -- Если главное окно закрыто, скрываем курсор
-    -- if not main_window_state[0] then
-        -- imgui.ShowCursor = false
-    -- else
-        -- imgui.ShowCursor = true
-    -- end
-
-    -- -- Виджет
-    -- if settings.widget_visible[0] then
-        
-
-
-
-    -- -- Главное окно
-    -- if main_window_state[0] then
-        
 
 -- Открытие/закрытие окна
 function openMainWindow()
@@ -622,7 +588,6 @@ function calcOnline()
 end
 
 function formatTime(mode, vremya)
-
 	if mode == 0 then
 		oTime = totalOnlineTime
 	elseif mode == 1 then
@@ -700,14 +665,14 @@ function countPayDay()
 end
 
 local function fetchReleaseData()
-    downloadUrlToFile(updateURL, "MySalaryReleases.json", function(_, status)
+    downloadUrlToFile(updateURL, "moonloader\\config\\MySalary[Releases].json", function(_, status)
         if status == require("moonloader").download_status.STATUSEX_ENDDOWNLOAD then
-            local file = io.open("MySalaryReleases.json", "r")
+            local file = io.open("moonloader\\config\\MySalary[Releases].json", "r")
             if file then
                 releasesData = decodeJson(file:read("*a")) or {}
 				local latestRelease = releasesData[1]
 				local latestVersion = latestRelease.tag_name
-				if latestVersion ~= thisScript().version then
+				if compare_versions(thisScript().version, latestVersion) then
 					sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Доступна новая версия! Обновиться можно в настройках.", 0xFFFFFF)
 				else
 					sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}У вас установлена самая последняя версия.", 0xFFFFFF)
@@ -715,7 +680,7 @@ local function fetchReleaseData()
                 file:close()
                 isJsonLoaded = true
             else
-                print("Ошибка: Не удалось открыть MySalaryReleases.json")
+                print("Ошибка: Не удалось открыть MySalary[Releases].json")
             end
         end
     end)
@@ -762,9 +727,25 @@ local updateWindow = imgui.OnFrame(
                 end
             end
         end
-		--os.remove("\\moonloader\\config\\MySalaryReleases.json")
 		imgui.PopStyleColor()
         imgui.End()
     end
 )
 
+function compare_versions(v1, v2)
+    local function split_version(version)
+        local major, minor, patch = version:match("(%d+)%.(%d+)%.(%d+)")
+        return tonumber(major), tonumber(minor), tonumber(patch)
+    end
+
+    local major1, minor1, patch1 = split_version(v1)
+    local major2, minor2, patch2 = split_version(v2)
+
+    if major1 ~= major2 then
+        return major1 < major2
+    elseif minor1 ~= minor2 then
+        return minor1 < minor2
+    else
+        return patch1 < patch2
+    end
+end

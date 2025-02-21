@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.7")
+script_version("0.13.8")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -50,6 +50,10 @@ local timeHours = 0 -- Онлайн часов
 -- Вкладки
 local tabN = 1
 local statTab = 1
+
+-- Экран
+local screenResX = imgui.new.int(1920)
+local screenResY = imgui.new.int(1080)
 
 -- Настройки
 local hidden = imgui.new.bool(false)
@@ -201,7 +205,7 @@ end
 function main()
     while not isSampAvailable() do wait(0) end
     sampRegisterChatCommand("msalary", openMainWindow)
-	
+	setScreenResolution()
     loadData()
 	startTime = os.time()
 	calcOnline()
@@ -496,8 +500,8 @@ local mainWindow = imgui.OnFrame(
             imgui.Separator()
 
             imgui.Text(u8'Позиция виджета:')
-            imgui.SliderInt("X", settings.widget_position.x, 0, 1920)
-            imgui.SliderInt("Y", settings.widget_position.y, 0, 1080)
+            imgui.SliderInt("X", settings.widget_position.x, 0, screenResX[0] - widget_size.width)
+            imgui.SliderInt("Y", settings.widget_position.y, 0, screenResY[0] - widget_size.height)
 
             imgui.Separator()
 
@@ -748,4 +752,8 @@ function compare_versions(v1, v2)
     else
         return patch1 < patch2
     end
+end
+
+function setScreenResolution()
+	screenResX[0], screenResY[0] = getScreenResolution()
 end

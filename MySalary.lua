@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.9")
+script_version("0.13.10")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -204,9 +204,11 @@ end
 -- Основная функция
 function main()
     while not isSampAvailable() do wait(0) end
+	wait(1000)
     sampRegisterChatCommand("msalary", openMainWindow)
 	setScreenResolution()
     loadData()
+	wait(1000)
 	startTime = os.time()
 	calcOnline()
 
@@ -218,6 +220,7 @@ function main()
 			sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт активирован. Меню, настройки: {3d85c6} /msalary", 0xFFFFFF)
 			wait(1000)
             currentMoney = getPlayerMoney(Player)
+			wait(1000)
             while true do
 				if sampIsLocalPlayerSpawned() then -- Защита от вылетов (не учитывает операции в случае дисконекта)
 					playerMoney = getPlayerMoney(Player)

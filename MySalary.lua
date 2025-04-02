@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.8")
+script_version("0.13.9")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -216,6 +216,7 @@ function main()
 	while true do
         if sampIsLocalPlayerSpawned() then
 			sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт активирован. Меню, настройки: {3d85c6} /msalary", 0xFFFFFF)
+			wait(1000)
             currentMoney = getPlayerMoney(Player)
             while true do
 				if sampIsLocalPlayerSpawned() then -- Защита от вылетов (не учитывает операции в случае дисконекта)

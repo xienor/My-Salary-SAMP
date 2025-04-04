@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.0")
+script_version("0.14.1")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -84,6 +84,13 @@ local settings = {
     widget_text_size = imgui.new.int(14), -- Размер текста
     widget_stat_mode = imgui.new.bool(true), -- Режим работы виджета (0 - сессия, 1 - день)
 	widgetAlpha = imgui.new.float(1.0)
+}
+
+local moneyEvents = {
+	--{chatString="",event=""},
+	{chatString="Вы успешно погасили неоплаченные счета за коммунальные услуги",event="Оплата коммунальных услуг"},
+	{chatString="пополнили счёт дома за электроэнергию" ,event="Оплата электроэнергии"},
+	{chatString="Вы оплатили все налоги на сумму",event="Оплата всех налогов"}
 }
 
 -- Путь к JSON-файлу
@@ -237,7 +244,24 @@ function main()
 					elseif currentMoney > playerMoney then
 						spended = spended - (currentMoney - playerMoney)
 						sessionSpend = sessionSpend - (currentMoney - playerMoney)
-						lastOperations[os.date("%H:%M:%S")] = string.format('-' .. formatNumber((currentMoney - playerMoney)) .. ' $')
+						
+						operationType = "Операция не опеределена"
+						local operationTime = os.time()
+						for i = #chatLog, 1, -1 do
+							local logEntry = chatLog[i]
+							-- Проверяем, было ли сообщение не более 5 секунд назад
+							if operationTime - logEntry.time <= 5 then
+								for _, event in ipairs(moneyEvents) do
+									if string.match(logEntry.text, event.chatString) then
+										operationType = event.event
+										break
+									end
+								end
+							else
+								break -- Прерываем, если сообщения слишком старые
+							end
+						end
+						lastOperations[os.date("%H:%M:%S", operationTime)] = string.format('-' .. formatNumber((currentMoney - playerMoney)) .. ' $' .. " " .. operationType)
 					end
 					daySalary = earned + spended
 					sessSalary = sessionEarn + sessionSpend
@@ -479,7 +503,7 @@ local mainWindow = imgui.OnFrame(
             imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
             imgui.Separator()
             for operationTime, summ in pairs(lastOperations) do
-                imgui.Text(operationTime .. ': ' .. summ)
+                imgui.Text(operationTime .. ': ' .. u8(summ))
             end
         end
 
@@ -569,8 +593,15 @@ local logWindow = imgui.OnFrame(
         imgui.Begin(u8'My Salary: ЧатЛог', log_window_state, imgui.WindowFlags.NoCollapse)
 		player.HideCursor = false
 		
+		-- for _, log in ipairs(chatLog) do
+			-- imgui.Text(u8(log))
+		-- end
 		for _, log in ipairs(chatLog) do
-			imgui.Text(u8(log))
+			logButtonText = string.format("[" .. os.date("%H:%M:%S", log.time) .. "]" .. " " .. log.text)
+			if imgui.Button(u8(logButtonText)) then
+				print(logButtonText)
+			end
+			--imgui.Text(u8(string.format("[" .. log.time .. "]" .. " " .. log.text)))
 		end
 		
         imgui.End()
@@ -791,7 +822,14 @@ function setScreenResolution()
 end
 
 function events.onServerMessage(color, text)
-	local uncoloredText = string.gsub(text, "{.-}", "")
-	local logString = string.format("[" .. os.date("%H:%M:%S") .. "]" .. " " .. uncoloredText)
-	table.insert(chatLog, logString)
+    local uncoloredText = string.gsub(text, "{.-}", "")
+    table.insert(chatLog, {
+        time = os.time(), -- Сохраняем timestamp вместо строки
+        text = uncoloredText
+    })
+    
+    -- Ограничиваем размер лога (например, последние 50 сообщений)
+    if #chatLog > 50 then
+        table.remove(chatLog, 1)
+    end
 end

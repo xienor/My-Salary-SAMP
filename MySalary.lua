@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.2")
+script_version("0.14.3")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -118,7 +118,8 @@ local moneyEvents = {
 	{chatString="Благодаря улучшениям вашей семьи вы получаете", event="Зарплата на работе"},
 	{chatString="Пассажир оплатил билет", event="Доплата за пассажиров"},
 	{chatString="Вы немного перекусили", event="Питание в ларьке"},
-	{chatString="Вы получили (.+)!", event="Получение денег из ларцов"}
+	{chatString="Вы получили (.+)!", event="Получение денег из ларцов"},
+	{chatString="Клиент оплатил:", event="Зарплата таксиста"}
 	
 }
 
@@ -161,12 +162,14 @@ function loadData()
         daySalary = data.salary[currentDate].daySalary or 0
         totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
         payDayCount = data.salary[currentDate].payDayCount or 0
+		lastOperations = data.salary[currentDate].log or {}
     else
         earned = 0
         spended = 0
         daySalary = 0
         totalOnlineTime = 0
         payDayCount = 0
+		lastOperations = {}
     end
 
     -- Загрузка настроек
@@ -201,7 +204,8 @@ function saveData()
         spended = spended,
         daySalary = daySalary,
 		payDayCount = payDayCount,
-		totalOnlineTime = totalOnlineTime
+		totalOnlineTime = totalOnlineTime,
+		log = lastOperations or {}
     }
     data.update_date = currentDate
 	else
@@ -216,6 +220,7 @@ function saveData()
         daySalary = daySalary,
 		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime,
+		log = {}
     }
     data.update_date = currentDate
 	end
@@ -519,10 +524,54 @@ local mainWindow = imgui.OnFrame(
         if tabN == 2 then
             imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
             imgui.Separator()
-            for operationTime, summ in pairs(lastOperations) do
-                imgui.Text(operationTime .. ': ' .. u8(summ))
-            end
-        end
+			if next(data.salary) == nil then
+				imgui.Text(u8"Нет данных для отображения")
+			else
+			-- Получаем и сортируем даты в порядке убывания (сначала новые)
+				local sortedOps = {}
+				for date in pairs(data.salary) do
+					table.insert(sortedOps, date)
+				end
+				table.sort(sortedOps, function(a, b) return a > b end) -- Сортировка от новых к старым
+
+				-- Перебираем уже отсортированные даты
+				for _, date in ipairs(sortedOps) do
+					local todayOps = data.salary[date].log
+
+					-- Проверяем, существует ли таблица log
+					if todayOps and next(todayOps) then
+						if imgui.CollapsingHeader(u8(date)) then
+							local sortedOperations = {}
+
+							-- Заполняем массив операций
+							for operationTime, operation in pairs(todayOps) do
+								table.insert(sortedOperations, { time = operationTime, data = operation })
+							end
+
+							-- Сортируем операции по времени
+							table.sort(sortedOperations, function(a, b) return a.time < b.time end)
+
+							-- Выводим операции
+							for _, op in ipairs(sortedOperations) do
+								local operation = op.data
+								if operation.sym == "+" then
+									imgui.TextColored(imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
+								elseif operation.sym == "-" then
+									imgui.TextColored(imgui.ImVec4(1, 0 , 0, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
+								elseif operation.type == "Операция не определена" then --Не работает
+									imgui.TextColored(imgui.ImVec4(0.5, 0.5 , 0.5, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
+								end
+							end
+						end
+					else
+						-- Если log нет, просто отображаем заголовок
+						if imgui.CollapsingHeader(u8(date)) then
+							imgui.Text(u8"Нет операций за этот день")
+						end
+					end
+				end
+			end
+		end
 
         if tabN == 3 then
             imgui.Text(u8'Видимость виджета:')
@@ -852,7 +901,7 @@ function events.onServerMessage(color, text)
 end
 
 function createLog(oTime, summ, sym)
-	operationType = "Операция не опеределена"
+	operationType = "Операция не определена"
 	
 	for i = #chatLog, 1, -1 do
 	local logEntry = chatLog[i]
@@ -868,5 +917,16 @@ function createLog(oTime, summ, sym)
 			break -- Прерываем, если сообщения слишком старые
 		end
 	end
-	lastOperations[os.date("%H:%M:%S", oTime)] = string.format(sym .. formatNumber(summ) .. ' $' .. " " .. operationType)
+	lastOperations[os.date("%H:%M:%S", oTime)] = {
+		sym = sym,
+		summ = summ,
+		type = operationType
+	}
+	-- logRecord = {
+		-- time = oTime,
+		-- summ = summ,
+		-- desc = operationType,
+		-- sym = sym
+	-- }
+	--table.insert(data.salary[currentDate].log, logRecord)
 end

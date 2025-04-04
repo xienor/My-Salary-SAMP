@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.1")
+script_version("0.14.2")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -88,9 +88,38 @@ local settings = {
 
 local moneyEvents = {
 	--{chatString="",event=""},
-	{chatString="Вы успешно погасили неоплаченные счета за коммунальные услуги",event="Оплата коммунальных услуг"},
-	{chatString="пополнили счёт дома за электроэнергию" ,event="Оплата электроэнергии"},
-	{chatString="Вы оплатили все налоги на сумму",event="Оплата всех налогов"}
+	{chatString="Вы успешно погасили неоплаченные счета за коммунальные услуги", event="Оплата коммунальных услуг"},
+	{chatString="Вы успешно погасили неоплаченные счета за бизнес", event="Оплата налогов на бизнес"},
+	{chatString="Вы успешно продлили аренду своего номера в отеле", event="Оплата отеля"},
+	{chatString="пополнили счёт дома за электроэнергию", event="Оплата электроэнергии"},
+	{chatString="Вы оплатили все налоги на сумму", event="Оплата всех налогов"},
+	{chatString="выдаётся за каждого пациента", event="Премия за лечение"},
+	{chatString="Вас вылечил медик", event="Оплата за лечение"},
+	{chatString="за платную парковку", event="Оплата парковки"},
+	{chatString="Вы получили награды за выполнение задания", event="Награда за задание"},
+	{chatString="Вы начали лечение (.+) от укропозависимости", event="Излечение от укропозависимости"},
+	{chatString="Ваша зависимость от укропа упала до нуля", event="Лечение от укропозависимости"},
+	{chatString="Вы успешно купили", event="Покупка предмета"},
+	{chatString="Вы успешно продали", event="Продажа предмета"},
+	{chatString="К сожалению ты ничего не выиграл", event="Розыгрыш у Милтона"},
+	{chatString="Вы успешно обменяли (.+) на (.+) AZ Coins", event="Покупка AZ на ЦР"},
+	{chatString="Вы приобрели Быстрый билет", event="Покупка лотерейного билета"},
+	{chatString="Вы включили выбранный трек", event="Включение музыки на ЦР"},
+	{chatString="Вы сняли со своего банковского счета", event="Снятие денег с банковского счета"},
+	{chatString="Вы положили на свой банковский счет", event="Перевод на банковский счет"},
+	{chatString="Вы положили на свой депозитный счет", event="Перевод на депозитный счет"},
+	{chatString="Вам был добавлен предмет 'Евро'", event="Покупка Евро"},
+	{chatString="Вы совершили обмен (.+) на (.+) BTC", event="Покупка BTC"},
+	{chatString="Вы совершили обмен (.+) BTC на (.+)", event="Продажа BTC"},
+	{chatString="Вы совершили обмен (.+) ASC на (.+)", event="Продажа ASC"},
+	{chatString="Вы совершили обмен (.+) на (.+) ASC", event="Покупка ASC"},
+	{chatString="На миникарте отмечено место, где расположен дом", event="Поиск дома /findi"},
+	{chatString="На миникарте отмечено место, где расположен бизнес", event="Поиск бизнеса /findi"},
+	{chatString="Благодаря улучшениям вашей семьи вы получаете", event="Зарплата на работе"},
+	{chatString="Пассажир оплатил билет", event="Доплата за пассажиров"},
+	{chatString="Вы немного перекусили", event="Питание в ларьке"},
+	{chatString="Вы получили (.+)!", event="Получение денег из ларцов"}
+	
 }
 
 -- Путь к JSON-файлу
@@ -238,30 +267,18 @@ function main()
 				if sampIsLocalPlayerSpawned() then -- Защита от вылетов (не учитывает операции в случае дисконекта)
 					playerMoney = getPlayerMoney(Player)
 					if currentMoney < playerMoney then
-						earned = earned + (playerMoney - currentMoney)
+						opEarn = playerMoney - currentMoney
+						earned = earned + opEarn
 						sessionEarn = sessionEarn + (playerMoney - currentMoney)
-						lastOperations[os.date("%H:%M:%S")] = string.format('+' .. formatNumber((playerMoney - currentMoney)) .. ' $')
-					elseif currentMoney > playerMoney then
-						spended = spended - (currentMoney - playerMoney)
-						sessionSpend = sessionSpend - (currentMoney - playerMoney)
-						
-						operationType = "Операция не опеределена"
 						local operationTime = os.time()
-						for i = #chatLog, 1, -1 do
-							local logEntry = chatLog[i]
-							-- Проверяем, было ли сообщение не более 5 секунд назад
-							if operationTime - logEntry.time <= 5 then
-								for _, event in ipairs(moneyEvents) do
-									if string.match(logEntry.text, event.chatString) then
-										operationType = event.event
-										break
-									end
-								end
-							else
-								break -- Прерываем, если сообщения слишком старые
-							end
-						end
-						lastOperations[os.date("%H:%M:%S", operationTime)] = string.format('-' .. formatNumber((currentMoney - playerMoney)) .. ' $' .. " " .. operationType)
+						createLog(operationTime, opEarn, "+")
+					elseif currentMoney > playerMoney then
+						opSpend = currentMoney - playerMoney
+						spended = spended - opSpend
+						sessionSpend = sessionSpend - (currentMoney - playerMoney)
+						local operationTime = os.time()
+						createLog(operationTime, opSpend, "-")
+						
 					end
 					daySalary = earned + spended
 					sessSalary = sessionEarn + sessionSpend
@@ -832,4 +849,24 @@ function events.onServerMessage(color, text)
     if #chatLog > 50 then
         table.remove(chatLog, 1)
     end
+end
+
+function createLog(oTime, summ, sym)
+	operationType = "Операция не опеределена"
+	
+	for i = #chatLog, 1, -1 do
+	local logEntry = chatLog[i]
+	-- Проверяем, было ли сообщение не более 5 секунд назад
+		if oTime - logEntry.time <= 5 then
+			for _, event in ipairs(moneyEvents) do
+				if string.match(logEntry.text, event.chatString) then
+					operationType = event.event
+					break
+				end
+			end
+		else
+			break -- Прерываем, если сообщения слишком старые
+		end
+	end
+	lastOperations[os.date("%H:%M:%S", oTime)] = string.format(sym .. formatNumber(summ) .. ' $' .. " " .. operationType)
 end

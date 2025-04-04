@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.10")
+script_version("0.14.0")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -51,6 +51,10 @@ local timeHours = 0 -- Онлайн часов
 local tabN = 1
 local statTab = 1
 
+-- Лог серверных сообщений
+
+local chatLog = {}
+
 -- Экран
 local screenResX = imgui.new.int(1920)
 local screenResY = imgui.new.int(1080)
@@ -63,6 +67,7 @@ local new = imgui.new
 -- Переменные характеристик скрипта
 local widget_state = imgui.new.bool(true) -- Видимость виджета
 local main_window_state = imgui.new.bool(false) -- Видимость главного окна
+local log_window_state = imgui.new.bool(false) -- Видимость окна логов
 local widget_position = { x = 1500, y = 190 } -- Позиция виджета
 local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.new.int(14) -- Размер текста
@@ -206,6 +211,7 @@ function main()
     while not isSampAvailable() do wait(0) end
 	wait(1000)
     sampRegisterChatCommand("msalary", openMainWindow)
+	sampRegisterChatCommand("mslog", openChatLog)
 	setScreenResolution()
     loadData()
 	wait(1000)
@@ -556,9 +562,31 @@ local mainWindow = imgui.OnFrame(
     end
 )
 
+local logWindow = imgui.OnFrame(
+	function() return log_window_state[0] end,
+	function(player)
+		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8'My Salary: ЧатЛог', log_window_state, imgui.WindowFlags.NoCollapse)
+		player.HideCursor = false
+		
+		for _, log in ipairs(chatLog) do
+			imgui.Text(u8(log))
+		end
+		
+        imgui.End()
+		if not log_window_state[0] then
+		imgui.GetIO().MouseDrawCursor = false
+		end
+    end
+)
+
 -- Открытие/закрытие окна
 function openMainWindow()
     main_window_state[0]= not main_window_state[0]
+end
+
+function openChatLog()
+    log_window_state[0]= not log_window_state[0]
 end
 
 -- Форматирование чисел
@@ -760,4 +788,10 @@ end
 
 function setScreenResolution()
 	screenResX[0], screenResY[0] = getScreenResolution()
+end
+
+function events.onServerMessage(color, text)
+	local uncoloredText = string.gsub(text, "{.-}", "")
+	local logString = string.format("[" .. os.date("%H:%M:%S") .. "]" .. " " .. uncoloredText)
+	table.insert(chatLog, logString)
 end

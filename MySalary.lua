@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.3")
+script_version("0.14.4")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -91,6 +91,7 @@ local moneyEvents = {
 	{chatString="Вы успешно погасили неоплаченные счета за коммунальные услуги", event="Оплата коммунальных услуг"},
 	{chatString="Вы успешно погасили неоплаченные счета за бизнес", event="Оплата налогов на бизнес"},
 	{chatString="Вы успешно продлили аренду своего номера в отеле", event="Оплата отеля"},
+	{chatString="Вы успешно продали бочку", event="Продажа бочки с нефтью"},
 	{chatString="пополнили счёт дома за электроэнергию", event="Оплата электроэнергии"},
 	{chatString="Вы оплатили все налоги на сумму", event="Оплата всех налогов"},
 	{chatString="выдаётся за каждого пациента", event="Премия за лечение"},
@@ -108,7 +109,7 @@ local moneyEvents = {
 	{chatString="Вы сняли со своего банковского счета", event="Снятие денег с банковского счета"},
 	{chatString="Вы положили на свой банковский счет", event="Перевод на банковский счет"},
 	{chatString="Вы положили на свой депозитный счет", event="Перевод на депозитный счет"},
-	{chatString="Вам был добавлен предмет 'Евро'", event="Покупка Евро"},
+	{chatString="Вам был добавлен предмет 'Евро'", event="Покупка Евро"}, -- пофиксить, засчитывается при получении из ларцов
 	{chatString="Вы совершили обмен (.+) на (.+) BTC", event="Покупка BTC"},
 	{chatString="Вы совершили обмен (.+) BTC на (.+)", event="Продажа BTC"},
 	{chatString="Вы совершили обмен (.+) ASC на (.+)", event="Продажа ASC"},
@@ -118,9 +119,33 @@ local moneyEvents = {
 	{chatString="Благодаря улучшениям вашей семьи вы получаете", event="Зарплата на работе"},
 	{chatString="Пассажир оплатил билет", event="Доплата за пассажиров"},
 	{chatString="Вы немного перекусили", event="Питание в ларьке"},
-	{chatString="Вы получили (.+)!", event="Получение денег из ларцов"},
-	{chatString="Клиент оплатил:", event="Зарплата таксиста"}
-	
+	{chatString="Вы получили (.+)!", event="Получение денег из рулеток"},
+	{chatString="Вам начислено", event="Получение денег из ларцов"},
+	{chatString="Клиент оплатил:", event="Зарплата таксиста"},
+	{chatString="Вы успешно использовали медикаменты и вылечили пациента", event="Лечение NPC"},
+	{chatString="Вы получили (.+) за ящик с медикаментами", event="Нелегальная доставка медикаментов"},
+	{chatString="доставил 100 медикаментов на склад больницы", event="Доставка медикаментов"},
+	{chatString="Выберите дом куда доставить продукты", event="Заказ продуктов в дом"},
+	{chatString="Вы успешно заказали (.+) продуктов для", event="Заказ продуктов в бизнес"},
+	{chatString="Вам был добавлен предмет 'Осколок Истока'", event="Задания для бизнеса"},
+	{chatString="Вы положили на склад", event="Положили на склад"},
+	{chatString="Вы успешно достали из склада", event="Взяли со склада"},
+	{chatString="Вы успешно сделали ставку на контейнер", event="Ставка на контейнер"},
+	{chatString="Вам был добавлен предмет 'Фишки для казино'", event="Покупка фишек"},
+	{chatString="Вот Ваши вещи. С Вас", event="Получение товаров в пункте выдачи"},
+	{chatString="Вы успешно арендовали это ТС", event="Аренда транспорта"},
+	{chatString="Вы пожертвовали (.+) на развитие штата!", event="Пожертвование"},
+	{chatString="Вы купили (.+) боеприпасами за", event="Покупка оружия"},
+	{chatString="Процесс заправки завершён", event="Заправка ТС"},
+	{chatString="Вы оплатили (.+) наличными за установку", event="Тюнинг ТС"},
+	{chatString="Работы по покраске автомобиля завершены", event="Покраска ТС"},
+	{chatString="Вы успешно поставили ставку на выбранный матч", event="Ставка в букмекерской конторе"},
+	{chatString="Вы подали заявление на страхование имущества", event="Страхование имущества"},
+	{chatString="Товар добавлен в корзину", event="Тюнинг ТС"},
+	{chatString="Вы купили обручальные кольца", event="Покупка обручальных колец"},
+	{chatString="Вы арендовали транспорт", event="Аренда транспорта"},
+	{chatString="купил у вас (.+) вы получили", event="Продажа предмета"},
+	{chatString="Вы успешно приобрели билет на фильм", event="Покупка билета в кино"}
 }
 
 -- Путь к JSON-файлу
@@ -214,6 +239,7 @@ function saveData()
 		daySalary = 0
 		totalOnlineTime = 0
 		payDayCount = 0
+		lastOperations = {}
 		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
@@ -554,11 +580,11 @@ local mainWindow = imgui.OnFrame(
 							-- Выводим операции
 							for _, op in ipairs(sortedOperations) do
 								local operation = op.data
-								if operation.sym == "+" then
+								if operation.sym == "+" and operation.type ~= "Операция не определена" then
 									imgui.TextColored(imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
-								elseif operation.sym == "-" then
+								elseif operation.sym == "-" and operation.type ~= "Операция не определена" then
 									imgui.TextColored(imgui.ImVec4(1, 0 , 0, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
-								elseif operation.type == "Операция не определена" then --Не работает
+								elseif operation.type == "Операция не определена" then
 									imgui.TextColored(imgui.ImVec4(0.5, 0.5 , 0.5, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
 								end
 							end

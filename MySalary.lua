@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.4")
+script_version("0.14.5")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -29,6 +29,7 @@ local spended = 0 -- Потрачено денег
 local daySalary = 0 -- Общий доход за день
 
 local lastOperations = {}
+local customTypes = {}
 
 local payDayCount = 0 -- Количество PayDay за день
 local lastPayDay = 0
@@ -62,12 +63,15 @@ local screenResY = imgui.new.int(1080)
 -- Настройки
 local hidden = imgui.new.bool(false)
 local wasCursorActive = false
-local new = imgui.new
+local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
+local nameInputField = new.char[256]()
+local descInputField = new.char[256]()
 
 -- Переменные характеристик скрипта
 local widget_state = imgui.new.bool(true) -- Видимость виджета
 local main_window_state = imgui.new.bool(false) -- Видимость главного окна
 local log_window_state = imgui.new.bool(false) -- Видимость окна логов
+local types_window_state = imgui.new.bool(false) -- Видимость окна логов
 local widget_position = { x = 1500, y = 190 } -- Позиция виджета
 local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.new.int(14) -- Размер текста
@@ -163,7 +167,8 @@ local data = {
         widget_stat_mode = true,
 		widgetAlpha = 1.0
     },
-    update_date = "" -- Последняя дата обновления
+    update_date = "", -- Последняя дата обновления
+	savedTypes = {}
 }
 
 -- Инициализация файла
@@ -188,6 +193,7 @@ function loadData()
         totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
         payDayCount = data.salary[currentDate].payDayCount or 0
 		lastOperations = data.salary[currentDate].log or {}
+		customTypes = data.savedTypes or {}
     else
         earned = 0
         spended = 0
@@ -195,6 +201,7 @@ function loadData()
         totalOnlineTime = 0
         payDayCount = 0
 		lastOperations = {}
+		customTypes = data.savedTypes or {}
     end
 
     -- Загрузка настроек
@@ -231,8 +238,9 @@ function saveData()
 		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime,
 		log = lastOperations or {}
-    }
-    data.update_date = currentDate
+		}
+		data.update_date = currentDate
+		data.savedTypes = customTypes or {}
 	else
 		earned = 0
 		spended = 0
@@ -247,8 +255,9 @@ function saveData()
 		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime,
 		log = {}
-    }
-    data.update_date = currentDate
+		}
+		data.update_date = currentDate
+		data.savedTypes = customTypes or {}
 	end
 
     -- Сохранение настроек
@@ -624,6 +633,12 @@ local mainWindow = imgui.OnFrame(
             end
 
             imgui.Separator()
+			
+			if imgui.Button(u8'Настроить персональные категории') then
+				types_window_state[0] = not types_window_state[0]
+			end
+			
+			imgui.Separator()
 
             imgui.Text(u8'Позиция виджета:')
             imgui.SliderInt("X", settings.widget_position.x, 0, screenResX[0] - widget_size.width)
@@ -703,6 +718,79 @@ local logWindow = imgui.OnFrame(
     end
 )
 
+local typesWindow = imgui.OnFrame(
+	function() return types_window_state[0] end,
+	function(player)
+		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8'My Salary: Персональные категории', types_window_state, imgui.WindowFlags.NoCollapse)
+		player.HideCursor = false
+		
+		if imgui.CollapsingHeader(u8'Инструкция') then
+			imgui.Text(u8'В этом разделе вы можете задать свои типы категорий для статистики.')
+			imgui.Text(u8'Для добавления своей категории нужно заполнить 2 поля и нажать кнопку - Добавть')
+			imgui.Text(u8'В поле Название - введите то как вы хотите чтобы операция отображалась.')
+			imgui.Text(u8'В поле Описание - введите строку которая выводится в час после успешного завершения операции.')
+			imgui.Text(u8'Не вводите такие символы как $ [ ]')
+			imgui.Text(u8'Важно чтобы то что вы ввели в поле Описание появлялось по завершению КАЖДОЙ операции.')
+			imgui.Text(u8'Обратите внимание также на буквы, очень важно вводить все дословно и точно: Ё должна быть Ё а не Е.')
+		end
+		
+		if imgui.InputText(u8"Название", nameInputField, sizeof(descInputField)) then
+		
+        end
+			
+		if imgui.InputText(u8"Описание", descInputField, sizeof(descInputField)) then
+		
+		end
+			
+		if imgui.Button(u8'Добавить') then
+		local descSrt = u8:decode(ffi.string(nameInputField))
+		local nameStr = u8:decode(ffi.string(descInputField))
+			table.insert(customTypes, {
+			chatString = nameStr,
+			event = descSrt
+			})
+			ffi.fill(nameInputField, sizeof(nameInputField), 0)
+			ffi.fill(descInputField, sizeof(descInputField), 0)
+		end
+		
+		imgui.Separator()
+		
+		if next(customTypes) == nil then
+			imgui.Text(u8'Не создано ни одной персональной категории')
+		else
+			-- Создаем временную таблицу для хранения индексов элементов, которые нужно удалить
+			local indicesToRemove = {}
+
+			-- Сначала собираем индексы элементов для удаления
+			for i, type in ipairs(customTypes) do
+				imgui.Text(u8(type.event))
+				imgui.SameLine()
+				imgui.Text(u8(type.chatString))
+				imgui.SameLine()
+				if imgui.Button(u8'Удалить ' .. i) then  -- Добавил индекс для наглядности
+					table.insert(indicesToRemove, 1, i)  -- Запоминаем индекс в начале списка
+				end
+			end
+
+			-- Удаляем элементы по собранным индексам (с конца, чтобы не сломать порядок)
+			for _, i in ipairs(indicesToRemove) do
+				table.remove(customTypes, i)
+			end
+
+			-- Если были удаления, сохраняем данные
+			if #indicesToRemove > 0 then
+				saveData()
+			end
+		end
+		
+        imgui.End()
+		if not types_window_state[0] then
+		imgui.GetIO().MouseDrawCursor = false
+		end
+    end
+)
+
 -- Открытие/закрытие окна
 function openMainWindow()
     main_window_state[0]= not main_window_state[0]
@@ -710,6 +798,10 @@ end
 
 function openChatLog()
     log_window_state[0]= not log_window_state[0]
+end
+
+function openTypesWindow()
+	types_window_state[0] = not types_window_state[0]
 end
 
 -- Форматирование чисел
@@ -933,11 +1025,26 @@ function createLog(oTime, summ, sym)
 	local logEntry = chatLog[i]
 	-- Проверяем, было ли сообщение не более 5 секунд назад
 		if oTime - logEntry.time <= 5 then
-			for _, event in ipairs(moneyEvents) do
+			if next(customTypes) == nil then
+				customTypes = {
+				{event = "HIDDEN", chatString = "DO NOT DELETE"}
+				}
+			end
+			for _, event in ipairs(customTypes) do
 				if string.match(logEntry.text, event.chatString) then
 					operationType = event.event
 					break
+				else
+					for _, event in ipairs(moneyEvents) do
+						if string.match(logEntry.text, event.chatString) then
+							operationType = event.event
+							break
+						end
+					end
 				end
+			end
+			if customTypes[1] and customTypes[1].event == "HIDDEN" then
+				table.remove(customTypes, 1)
 			end
 		else
 			break -- Прерываем, если сообщения слишком старые
@@ -956,3 +1063,4 @@ function createLog(oTime, summ, sym)
 	-- }
 	--table.insert(data.salary[currentDate].log, logRecord)
 end
+

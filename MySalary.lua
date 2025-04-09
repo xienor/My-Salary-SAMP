@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.5")
+script_version("0.14.6")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -30,6 +30,7 @@ local daySalary = 0 -- Общий доход за день
 
 local lastOperations = {}
 local customTypes = {}
+local editOperation = 0
 
 local payDayCount = 0 -- Количество PayDay за день
 local lastPayDay = 0
@@ -71,7 +72,9 @@ local descInputField = new.char[256]()
 local widget_state = imgui.new.bool(true) -- Видимость виджета
 local main_window_state = imgui.new.bool(false) -- Видимость главного окна
 local log_window_state = imgui.new.bool(false) -- Видимость окна логов
-local types_window_state = imgui.new.bool(false) -- Видимость окна логов
+local types_window_state = imgui.new.bool(false) -- Видимость окна пользовательских типов операций
+local edit_window_state = imgui.new.bool(false) -- Видимость окна пользовательских типов операций-------------------------------------------------
+local edit_mode = imgui.new.bool(false) -- Видимость окна пользовательских типов операций-----------------------------------------------------------------
 local widget_position = { x = 1500, y = 190 } -- Позиция виджета
 local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.new.int(14) -- Размер текста
@@ -557,56 +560,115 @@ local mainWindow = imgui.OnFrame(
         end
 
         if tabN == 2 then
-            imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
-            imgui.Separator()
-			if next(data.salary) == nil then
-				imgui.Text(u8"Нет данных для отображения")
-			else
-			-- Получаем и сортируем даты в порядке убывания (сначала новые)
-				local sortedOps = {}
-				for date in pairs(data.salary) do
-					table.insert(sortedOps, date)
-				end
-				table.sort(sortedOps, function(a, b) return a > b end) -- Сортировка от новых к старым
+		imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
+		imgui.SameLine()
+		if imgui.Checkbox(u8'Редактировать', edit_mode) then
 
-				-- Перебираем уже отсортированные даты
-				for _, date in ipairs(sortedOps) do
-					local todayOps = data.salary[date].log
+		end
+		
+		imgui.Separator()
+		
+		if next(data.salary) == nil then
+			imgui.Text(u8"Нет данных для отображения")
+		else
+			-- Получаем и сортируем даты
+			local sortedOps = {}
+			for date in pairs(data.salary) do
+				table.insert(sortedOps, date)
+			end
+			table.sort(sortedOps, function(a, b) return a > b end)
 
-					-- Проверяем, существует ли таблица log
-					if todayOps and next(todayOps) then
-						if imgui.CollapsingHeader(u8(date)) then
-							local sortedOperations = {}
+			-- Перебираем даты
+			for _, date in ipairs(sortedOps) do
+				local todayOps = data.salary[date].log
 
-							-- Заполняем массив операций
-							for operationTime, operation in pairs(todayOps) do
-								table.insert(sortedOperations, { time = operationTime, data = operation })
-							end
+				if todayOps and next(todayOps) then
+					if imgui.CollapsingHeader(u8(date)) then
+						local sortedOperations = {}
+						
+						-- Заполняем массив операций
+						for operationTime, operation in pairs(todayOps) do
+							table.insert(sortedOperations, { time = operationTime, data = operation })
+						end
 
-							-- Сортируем операции по времени
-							table.sort(sortedOperations, function(a, b) return a.time < b.time end)
+						-- Сортируем операции по времени
+						table.sort(sortedOperations, function(a, b) return a.time < b.time end)
 
-							-- Выводим операции
-							for _, op in ipairs(sortedOperations) do
-								local operation = op.data
-								if operation.sym == "+" and operation.type ~= "Операция не определена" then
-									imgui.TextColored(imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
-								elseif operation.sym == "-" and operation.type ~= "Операция не определена" then
-									imgui.TextColored(imgui.ImVec4(1, 0 , 0, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
-								elseif operation.type == "Операция не определена" then
-									imgui.TextColored(imgui.ImVec4(0.5, 0.5 , 0.5, settings.widgetAlpha[0]), op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. operation.type))
+						-- Выводим операции
+						for _, op in ipairs(sortedOperations) do
+							local operation = op.data
+							local op_id = date .. "_" .. op.time
+							
+							if edit_mode[0] then
+								-- Режим редактирования
+								imgui.Text(op.time .. ': ' .. operation.sym .. formatNumber(operation.summ) .. " $ ")
+								imgui.SameLine()
+								
+								-- Подготовка списка типов
+								local allTypes = {}
+								local originalTypes = {} -- Сохраняем оригинальные значения
+								
+								-- Добавляем moneyEvents
+								for _, t in ipairs(moneyEvents) do
+									table.insert(allTypes, u8(t.event))
+									table.insert(originalTypes, t.event)
 								end
+								
+								-- Добавляем customTypes
+								if customTypes and next(customTypes) ~= nil then
+									for _, t in ipairs(customTypes) do
+										table.insert(allTypes, u8(t.event))
+										table.insert(originalTypes, t.event)
+									end
+								end
+								
+								-- Находим текущий индекс
+								local currentIndex = 0
+								local currentType = operation.type or "Операция не определена"
+								for i, typeName in ipairs(originalTypes) do
+									if typeName == currentType then
+										currentIndex = i - 1
+										break
+									end
+								end
+								
+								-- ComboBox
+								local currentIndexPtr = imgui.new.int(currentIndex)
+								local comboName = "##type_" .. date .. "_" .. op.time
+								local imguiTypes = imgui.new['const char*'][#allTypes](allTypes)
+								
+								if imgui.Combo(comboName, currentIndexPtr, imguiTypes, #allTypes) then
+									local selectedIndex = currentIndexPtr[0] + 1
+									if selectedIndex >= 1 and selectedIndex <= #originalTypes then
+										operation.type = originalTypes[selectedIndex]
+									else
+										operation.type = "Операция не определена"
+									end
+									saveData()
+								end
+							else
+								-- Обычный режим отображения
+								local color
+								local opType = operation.type or "Операция не определена"
+								if operation.sym == "+" and opType ~= "Операция не определена" then
+									color = imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0])
+								elseif operation.sym == "-" and opType ~= "Операция не определена" then
+									color = imgui.ImVec4(1, 0, 0, settings.widgetAlpha[0])
+								else
+									color = imgui.ImVec4(0.5, 0.5, 0.5, settings.widgetAlpha[0])
+								end
+								imgui.TextColored(color, op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. opType))
 							end
 						end
-					else
-						-- Если log нет, просто отображаем заголовок
-						if imgui.CollapsingHeader(u8(date)) then
-							imgui.Text(u8"Нет операций за этот день")
-						end
+					end
+				else
+					if imgui.CollapsingHeader(u8(date)) then
+						imgui.Text(u8"Нет операций за этот день")
 					end
 				end
 			end
 		end
+	end
 
         if tabN == 3 then
             imgui.Text(u8'Видимость виджета:')
@@ -786,6 +848,22 @@ local typesWindow = imgui.OnFrame(
 		
         imgui.End()
 		if not types_window_state[0] then
+		imgui.GetIO().MouseDrawCursor = false
+		end
+    end
+)
+
+local editWindow = imgui.OnFrame(
+	function() return edit_window_state[0] end,
+	function(player)
+		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8'My Salary: Редактирование операции', edit_window_state, imgui.WindowFlags.NoCollapse)
+		player.HideCursor = false
+		
+		imgui.Text(u8(editOperation))
+
+        imgui.End()
+		if not edit_window_state[0] then
 		imgui.GetIO().MouseDrawCursor = false
 		end
     end

@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.6")
+script_version("0.14.7")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -152,7 +152,12 @@ local moneyEvents = {
 	{chatString="Вы купили обручальные кольца", event="Покупка обручальных колец"},
 	{chatString="Вы арендовали транспорт", event="Аренда транспорта"},
 	{chatString="купил у вас (.+) вы получили", event="Продажа предмета"},
-	{chatString="Вы успешно приобрели билет на фильм", event="Покупка билета в кино"}
+	{chatString="Вы успешно приобрели билет на фильм", event="Покупка билета в кино"},
+	{chatString="Вы успешно приобрели (.+) VC-долларов за", event="Покупка VC"},
+	{chatString="Вы успешно обменяли (.+) VC-долларов на", event="Продажа VC"},
+	{chatString="Ты купил разрешение на добычу ресурсов", event="Покупка разрешения на добычу ресурсов"},
+	{chatString="Вы приобрели (.+) семян за", event="Покупка семян на ферме"},
+	{chatString="Отлично! Держите вашу пилу. Продуктивного рабочего дня!", event="Покупка бензопилы на ферме"}
 }
 
 -- Путь к JSON-файлу
@@ -1097,48 +1102,59 @@ function events.onServerMessage(color, text)
 end
 
 function createLog(oTime, summ, sym)
-	operationType = "Операция не определена"
-	
-	for i = #chatLog, 1, -1 do
-	local logEntry = chatLog[i]
-	-- Проверяем, было ли сообщение не более 5 секунд назад
-		if oTime - logEntry.time <= 5 then
-			if next(customTypes) == nil then
-				customTypes = {
-				{event = "HIDDEN", chatString = "DO NOT DELETE"}
-				}
-			end
-			for _, event in ipairs(customTypes) do
-				if string.match(logEntry.text, event.chatString) then
-					operationType = event.event
-					break
-				else
-					for _, event in ipairs(moneyEvents) do
-						if string.match(logEntry.text, event.chatString) then
-							operationType = event.event
-							break
-						end
-					end
-				end
-			end
-			if customTypes[1] and customTypes[1].event == "HIDDEN" then
-				table.remove(customTypes, 1)
-			end
-		else
-			break -- Прерываем, если сообщения слишком старые
-		end
-	end
-	lastOperations[os.date("%H:%M:%S", oTime)] = {
-		sym = sym,
-		summ = summ,
-		type = operationType
-	}
-	-- logRecord = {
-		-- time = oTime,
-		-- summ = summ,
-		-- desc = operationType,
-		-- sym = sym
-	-- }
-	--table.insert(data.salary[currentDate].log, logRecord)
+    operationType = "Операция не определена"
+    
+    for i = #chatLog, 1, -1 do
+        local logEntry = chatLog[i]
+        -- Проверяем, было ли сообщение не более 5 секунд назад
+        if oTime - logEntry.time <= 5 then
+            -- Инициализация customTypes при необходимости
+            if next(customTypes) == nil then
+                customTypes = {
+                    {event = "HIDDEN", chatString = "DO NOT DELETE"}
+                }
+            end
+            
+            local found = false -- Флаг для отслеживания найденного совпадения
+            
+            -- Сначала проверяем все элементы в customTypes
+            for _, event in ipairs(customTypes) do
+                if string.match(logEntry.text, event.chatString) then
+                    operationType = event.event
+                    found = true
+                    break -- Выходим из цикла по customTypes
+                end
+            end
+            
+            -- Если в customTypes не нашли, проверяем moneyEvents
+            if not found then
+                for _, event in ipairs(moneyEvents) do
+                    if string.match(logEntry.text, event.chatString) then
+                        operationType = event.event
+                        found = true
+                        break -- Выходим из цикла по moneyEvents
+                    end
+                end
+            end
+            
+            -- Удаляем HIDDEN, если он был добавлен
+            if customTypes[1] and customTypes[1].event == "HIDDEN" then
+                table.remove(customTypes, 1)
+            end
+            
+            -- Если нашли совпадение, прерываем цикл по chatLog
+            if found then
+                break
+            end
+        else
+            break -- Прерываем, если сообщения слишком старые
+        end
+    end
+    
+    lastOperations[os.date("%H:%M:%S", oTime)] = {
+        sym = sym,
+        summ = summ,
+        type = operationType
+    }
 end
 

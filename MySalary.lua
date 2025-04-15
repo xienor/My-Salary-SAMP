@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.7")
+script_version("0.14.8")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -74,6 +74,7 @@ local main_window_state = imgui.new.bool(false) -- Видимость главного окна
 local log_window_state = imgui.new.bool(false) -- Видимость окна логов
 local types_window_state = imgui.new.bool(false) -- Видимость окна пользовательских типов операций
 local edit_window_state = imgui.new.bool(false) -- Видимость окна пользовательских типов операций-------------------------------------------------
+local local_checkbox_state = imgui.new.bool(false)
 local edit_mode = imgui.new.bool(false) -- Видимость окна пользовательских типов операций-----------------------------------------------------------------
 local widget_position = { x = 1500, y = 190 } -- Позиция виджета
 local widget_size = { width = 200, height = 90 } -- Размер виджета
@@ -786,75 +787,81 @@ local logWindow = imgui.OnFrame(
 )
 
 local typesWindow = imgui.OnFrame(
-	function() return types_window_state[0] end,
-	function(player)
-		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+    function() return types_window_state[0] end,
+    function(player)
+        imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
         imgui.Begin(u8'My Salary: Персональные категории', types_window_state, imgui.WindowFlags.NoCollapse)
-		player.HideCursor = false
-		
-		if imgui.CollapsingHeader(u8'Инструкция') then
-			imgui.Text(u8'В этом разделе вы можете задать свои типы категорий для статистики.')
-			imgui.Text(u8'Для добавления своей категории нужно заполнить 2 поля и нажать кнопку - Добавть')
-			imgui.Text(u8'В поле Название - введите то как вы хотите чтобы операция отображалась.')
-			imgui.Text(u8'В поле Описание - введите строку которая выводится в час после успешного завершения операции.')
-			imgui.Text(u8'Не вводите такие символы как $ [ ]')
-			imgui.Text(u8'Важно чтобы то что вы ввели в поле Описание появлялось по завершению КАЖДОЙ операции.')
-			imgui.Text(u8'Обратите внимание также на буквы, очень важно вводить все дословно и точно: Ё должна быть Ё а не Е.')
-		end
-		
-		if imgui.InputText(u8"Название", nameInputField, sizeof(descInputField)) then
-		
+        player.HideCursor = false
+        
+        -- Добавляем состояние для чекбокса
+        
+
+        if imgui.CollapsingHeader(u8'Инструкция') then
+            imgui.Text(u8'В этом разделе вы можете задать свои типы категорий для статистики.')
+            imgui.Text(u8'Для добавления своей категории нужно заполнить 2 поля и нажать кнопку - Добавть')
+            imgui.Text(u8'В поле Название - введите то как вы хотите чтобы операция отображалась.')
+            imgui.Text(u8'В поле Описание - введите строку которая выводится в час после успешного завершения операции.')
+            imgui.Text(u8'Не вводите такие символы как $ [ ]')
+            imgui.Text(u8'Важно чтобы то что вы ввели в поле Описание появлялось по завершению КАЖДОЙ операции.')
+            imgui.Text(u8'Обратите внимание также на буквы, очень важно вводить все дословно и точно: Ё должна быть Ё а не Е.')
         end
-			
-		if imgui.InputText(u8"Описание", descInputField, sizeof(descInputField)) then
-		
-		end
-			
-		if imgui.Button(u8'Добавить') then
-		local descSrt = u8:decode(ffi.string(nameInputField))
-		local nameStr = u8:decode(ffi.string(descInputField))
-			table.insert(customTypes, {
-			chatString = nameStr,
-			event = descSrt
-			})
-			ffi.fill(nameInputField, sizeof(nameInputField), 0)
-			ffi.fill(descInputField, sizeof(descInputField), 0)
-		end
-		
-		imgui.Separator()
-		
-		if next(customTypes) == nil then
-			imgui.Text(u8'Не создано ни одной персональной категории')
-		else
-			-- Создаем временную таблицу для хранения индексов элементов, которые нужно удалить
-			local indicesToRemove = {}
+        
+        if imgui.InputText(u8"Название", nameInputField, sizeof(descInputField)) then
+        end
+            
+        -- Показываем поле описания только если чекбокс неактивен
+        if not local_checkbox_state[0] then
+            if imgui.InputText(u8"Описание", descInputField, sizeof(descInputField)) then
+            end
+        end
+            
+        if imgui.Button(u8'Добавить') then
+            local descSrt = u8:decode(ffi.string(nameInputField))
+            -- Используем фиксированное описание если чекбокс активен
+            local nameStr = local_checkbox_state[0] and "locallocallocallocal" or u8:decode(ffi.string(descInputField))
+            
+            table.insert(customTypes, {
+                chatString = nameStr,
+                event = descSrt
+            })
+            ffi.fill(nameInputField, sizeof(nameInputField), 0)
+            ffi.fill(descInputField, sizeof(descInputField), 0)
+        end
+        
+        -- Добавляем чекбокс на ту же линию что и кнопка
+        imgui.SameLine()
+        imgui.Checkbox(u8"Локальная", local_checkbox_state)
 
-			-- Сначала собираем индексы элементов для удаления
-			for i, type in ipairs(customTypes) do
-				imgui.Text(u8(type.event))
-				imgui.SameLine()
-				imgui.Text(u8(type.chatString))
-				imgui.SameLine()
-				if imgui.Button(u8'Удалить ' .. i) then  -- Добавил индекс для наглядности
-					table.insert(indicesToRemove, 1, i)  -- Запоминаем индекс в начале списка
-				end
-			end
+        imgui.Separator()
+        
+        if next(customTypes) == nil then
+            imgui.Text(u8'Не создано ни одной персональной категории')
+        else
+            local indicesToRemove = {}
 
-			-- Удаляем элементы по собранным индексам (с конца, чтобы не сломать порядок)
-			for _, i in ipairs(indicesToRemove) do
-				table.remove(customTypes, i)
-			end
+            for i, type in ipairs(customTypes) do
+                imgui.Text(u8(type.event))
+                imgui.SameLine()
+                imgui.Text(u8(type.chatString))
+                imgui.SameLine()
+                if imgui.Button(u8'Удалить ' .. i) then
+                    table.insert(indicesToRemove, 1, i)
+                end
+            end
 
-			-- Если были удаления, сохраняем данные
-			if #indicesToRemove > 0 then
-				saveData()
-			end
-		end
-		
+            for _, i in ipairs(indicesToRemove) do
+                table.remove(customTypes, i)
+            end
+
+            if #indicesToRemove > 0 then
+                saveData()
+            end
+        end
+        
         imgui.End()
-		if not types_window_state[0] then
-		imgui.GetIO().MouseDrawCursor = false
-		end
+        if not types_window_state[0] then
+            imgui.GetIO().MouseDrawCursor = false
+        end
     end
 )
 

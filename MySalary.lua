@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.8")
+script_version("0.14.9")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -484,16 +484,33 @@ local mainWindow = imgui.OnFrame(
             imgui.Separator()
 
             if statTab == 1 then
-				imgui.Columns(2, nil, false)
-				imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
-				imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
-				imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
-				imgui.NextColumn()
-				imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
-				imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
-				imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
-				imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
-				imgui.Columns(1)
+				--imgui.Columns(2, nil, false)
+				if imgui.BeginChild('Cash', imgui.ImVec2(220, 100), true) then
+					if widget_stat_mode[0] == false then
+						imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
+						imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
+						imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
+					else
+						imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
+						imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
+						imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
+						imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
+					end
+					imgui.EndChild() -- обязательно следите за тем, чтобы каждый чайлд был закрыт
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('Bank', imgui.ImVec2(220, 100), true) then
+					imgui.Text(u8'Зарплата за сегодня: ' .. 'деняк' .. '$')
+					imgui.Text(u8'Депозит за сегодня: ' .. 'деняк' .. '$')
+					imgui.Text(u8'Итого за сегодня: ' .. 'деняк' .. '$')
+					imgui.EndChild() -- обязательно следите за тем, чтобы каждый чайлд был закрыт
+				end
+
+				
+				--
+				--imgui.NextColumn()
+
+				--imgui.Columns(1)
 
 				if imgui.Button(u8'Очистить статистику за сессию') then
 					sessionEarn = 0
@@ -1002,7 +1019,83 @@ function countPayDay()
     if (currentOsTime.min == 0 or currentOsTime.min == 30) and (now - lastPayDay >= 1800) then
         payDayCount = payDayCount + 1
         lastPayDay = now
+		getBankEarnings()
     end
+end
+
+function getBankEarnings()
+    local bankEarn, depEarn = 0, 0
+    local currentTime = os.time()
+    local timeWindow = 300 -- 5-минутное окно поиска
+    
+	print("[DEBUG] Последние 5 сообщений чатлога:")
+	for i = math.max(1, #chatLog-5), #chatLog do
+		print(string.format("[%s] %s", os.date("%H:%M:%S", chatLog[i].time), chatLog[i].text))
+	end
+	
+    -- Поиск по блоку с заголовком
+    for i = #chatLog, 1, -1 do
+        local entry = chatLog[i]
+        
+        if entry.time >= (currentTime - timeWindow) then
+            if entry.text:match("Банковский чек") then
+                for j = i, math.min(i + 10, #chatLog) do
+                    local text = chatLog[j].text
+                    
+                    -- Парсинг банка с защитой от ошибок
+                    if text:find("Текущая сумма в банке") then
+                        local amount_str = text:match("%+%$([%d%.]+)")
+                        if amount_str then
+                            local cleaned = amount_str:gsub("%D", "")
+                            if cleaned ~= "" then
+                                bankEarn = tonumber(cleaned) or 0
+                                print("[БАНК] Получено:", bankEarn)
+                            end
+                        end
+                    end
+                    
+                    -- Парсинг депозита с защитой от ошибок
+                    if text:find("Текущая сумма на депозите") then
+                        local amount_str = text:match("%+%$([%d%.]+)")
+                        if amount_str then
+                            local cleaned = amount_str:gsub("%D", "")
+                            if cleaned ~= "" then
+                                depEarn = tonumber(cleaned) or 0
+                                print("[ДЕПОЗИТ] Получено:", depEarn)
+                            end
+                        end
+                    end
+                end
+                break
+            end
+        end
+    end
+    
+    -- Если не найдено, ищем в последних сообщениях
+    if bankEarn == 0 or depEarn == 0 then
+        for i = #chatLog, math.max(1, #chatLog - 20), -1 do
+            local text = chatLog[i].text
+            
+            if text:find("Текущая сумма в банке") then
+                local amount_str = text:match("%+%$([%d%.]+)")
+                if amount_str then
+                    bankEarn = tonumber(amount_str:gsub("%D", "")) or 0
+                end
+            end
+            
+            if text:find("Текущая сумма на депозите") then
+                local amount_str = text:match("%+%$([%d%.]+)")
+                if amount_str then
+                    depEarn = tonumber(amount_str:gsub("%D", "")) or 0
+                end
+            end
+        end
+    end
+	print("[DEBUG] Последние 5 сообщений чатлога:")
+	for i = math.max(1, #chatLog-5), #chatLog do
+		print(string.format("[%s] %s", os.date("%H:%M:%S", chatLog[i].time), chatLog[i].text))
+	end
+    return bankEarn, depEarn
 end
 
 local function fetchReleaseData()
@@ -1103,7 +1196,7 @@ function events.onServerMessage(color, text)
     })
     
     -- Ограничиваем размер лога (например, последние 50 сообщений)
-    if #chatLog > 50 then
+    if #chatLog > 200 then
         table.remove(chatLog, 1)
     end
 end

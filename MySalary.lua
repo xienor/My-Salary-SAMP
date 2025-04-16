@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.14.9")
+script_version("0.15.0")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -27,6 +27,10 @@ local currentMoney = 0 -- Деньги записанные в скрипте
 local earned = 0 -- Получено денег
 local spended = 0 -- Потрачено денег
 local daySalary = 0 -- Общий доход за день
+local bankEarn = 0 -- Получено на банковский счет
+local depEarn = 0 -- Получено на депозит
+local bankSpend = 0 -- Потрачено со счета в банке
+local depSpend = 0 -- Потрачено с депозитного счета
 
 local lastOperations = {}
 local customTypes = {}
@@ -201,6 +205,10 @@ function loadData()
         daySalary = data.salary[currentDate].daySalary or 0
         totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
         payDayCount = data.salary[currentDate].payDayCount or 0
+		bankEarn = data.salary[currentDate].bankEarn or 0
+		depEarn = data.salary[currentDate].depEarn or 0
+		bankSpend = data.salary[currentDate].bankSpend or 0
+		depSpend = data.salary[currentDate].depSpend or 0
 		lastOperations = data.salary[currentDate].log or {}
 		customTypes = data.savedTypes or {}
     else
@@ -209,6 +217,10 @@ function loadData()
         daySalary = 0
         totalOnlineTime = 0
         payDayCount = 0
+		bankEarn = 0 
+		depEarn = 0
+		bankSpend = 0
+		depSpend = 0
 		lastOperations = {}
 		customTypes = data.savedTypes or {}
     end
@@ -246,6 +258,10 @@ function saveData()
         daySalary = daySalary,
 		payDayCount = payDayCount,
 		totalOnlineTime = totalOnlineTime,
+		bankEarn = bankEarn,
+		depEarn = depEarn,
+		bankSpend = bankSpend,
+		depSpend = depSpend,
 		log = lastOperations or {}
 		}
 		data.update_date = currentDate
@@ -256,12 +272,20 @@ function saveData()
 		daySalary = 0
 		totalOnlineTime = 0
 		payDayCount = 0
+		bankEarn = 0
+		depEarn = 0
+		bankSpend = 0
+		depSpend = 0
 		lastOperations = {}
 		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
         daySalary = daySalary,
 		payDayCount = payDayCount,
+		bankEarn = bankEarn,
+		depEarn = depEarn,
+		bankSpend = bankSpend,
+		depSpend = depSpend,
 		totalOnlineTime = totalOnlineTime,
 		log = {}
 		}
@@ -500,8 +524,8 @@ local mainWindow = imgui.OnFrame(
 				end
 				imgui.SameLine()
 				if imgui.BeginChild('Bank', imgui.ImVec2(220, 100), true) then
-					imgui.Text(u8'Зарплата за сегодня: ' .. 'деняк' .. '$')
-					imgui.Text(u8'Депозит за сегодня: ' .. 'деняк' .. '$')
+					imgui.Text(u8'Зарплата за сегодня: ' .. formatNumber(bankEarn) .. ' $')
+					imgui.Text(u8'Депозит за сегодня: ' .. formatNumber(depEarn) .. ' $')
 					imgui.Text(u8'Итого за сегодня: ' .. 'деняк' .. '$')
 					imgui.EndChild() -- обязательно следите за тем, чтобы каждый чайлд был закрыт
 				end
@@ -1024,14 +1048,8 @@ function countPayDay()
 end
 
 function getBankEarnings()
-    local bankEarn, depEarn = 0, 0
     local currentTime = os.time()
     local timeWindow = 300 -- 5-минутное окно поиска
-    
-	print("[DEBUG] Последние 5 сообщений чатлога:")
-	for i = math.max(1, #chatLog-5), #chatLog do
-		print(string.format("[%s] %s", os.date("%H:%M:%S", chatLog[i].time), chatLog[i].text))
-	end
 	
     -- Поиск по блоку с заголовком
     for i = #chatLog, 1, -1 do
@@ -1048,8 +1066,8 @@ function getBankEarnings()
                         if amount_str then
                             local cleaned = amount_str:gsub("%D", "")
                             if cleaned ~= "" then
-                                bankEarn = tonumber(cleaned) or 0
-                                print("[БАНК] Получено:", bankEarn)
+                                bankEarn = bankEarn + tonumber(cleaned) or 0
+                                print("[БАНК] Получено:", tonumber(cleaned))
                             end
                         end
                     end
@@ -1060,8 +1078,8 @@ function getBankEarnings()
                         if amount_str then
                             local cleaned = amount_str:gsub("%D", "")
                             if cleaned ~= "" then
-                                depEarn = tonumber(cleaned) or 0
-                                print("[ДЕПОЗИТ] Получено:", depEarn)
+                                depEarn = depEarn + tonumber(cleaned) or 0
+                                print("[ДЕПОЗИТ] Получено:", tonumber(cleaned))
                             end
                         end
                     end
@@ -1079,22 +1097,18 @@ function getBankEarnings()
             if text:find("Текущая сумма в банке") then
                 local amount_str = text:match("%+%$([%d%.]+)")
                 if amount_str then
-                    bankEarn = tonumber(amount_str:gsub("%D", "")) or 0
+                    bankEarn = bankEarn + tonumber(amount_str:gsub("%D", "")) or 0
                 end
             end
             
             if text:find("Текущая сумма на депозите") then
                 local amount_str = text:match("%+%$([%d%.]+)")
                 if amount_str then
-                    depEarn = tonumber(amount_str:gsub("%D", "")) or 0
+                    depEarn = depEarn + tonumber(amount_str:gsub("%D", "")) or 0
                 end
             end
         end
     end
-	print("[DEBUG] Последние 5 сообщений чатлога:")
-	for i = math.max(1, #chatLog-5), #chatLog do
-		print(string.format("[%s] %s", os.date("%H:%M:%S", chatLog[i].time), chatLog[i].text))
-	end
     return bankEarn, depEarn
 end
 

@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.15.0")
+script_version("0.15.1")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -54,7 +54,6 @@ local timeMins = 0 -- Онлайн минут
 local timeHours = 0 -- Онлайн часов
 
 -- Вкладки
-local tabN = 1
 local statTab = 1
 
 -- Лог серверных сообщений
@@ -162,7 +161,12 @@ local moneyEvents = {
 	{chatString="Вы успешно обменяли (.+) VC-долларов на", event="Продажа VC"},
 	{chatString="Ты купил разрешение на добычу ресурсов", event="Покупка разрешения на добычу ресурсов"},
 	{chatString="Вы приобрели (.+) семян за", event="Покупка семян на ферме"},
-	{chatString="Отлично! Держите вашу пилу. Продуктивного рабочего дня!", event="Покупка бензопилы на ферме"}
+	{chatString="Отлично! Держите вашу пилу. Продуктивного рабочего дня!", event="Покупка бензопилы на ферме"},
+	{chatString="Салам брат, что надо?", event="Дела с Гурамом"},
+	{chatString="(.+) разбирает аксессуар (.+)", event="Разборка аксессуара"},
+	{chatString="Хороший товар! Держи свои деньги!", event="Продажа ресурсов Ларри"},
+	{chatString="Чтобы добыть полезные ископаемые, подойдите к месторождению!", event="Покупка инструмента у Ларри"},
+	{chatString="Прочность предмета успешно восстановлена!", event="Ремонт аксессуаров"}
 }
 
 -- Путь к JSON-файлу
@@ -471,22 +475,9 @@ local mainWindow = imgui.OnFrame(
 		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
         imgui.Begin(u8'My Salary: Главное окно', main_window_state, imgui.WindowFlags.NoCollapse)
 		player.HideCursor = false
-        if imgui.Button(u8'Статистика') then
-            tabN = 1
-        end
-        imgui.SameLine()
-        if imgui.Button(u8'Последние операции') then
-            tabN = 2
-        end
-        imgui.SameLine()
-        if imgui.Button(u8'Настройки') then
-            tabN = 3
-        end
-
-        imgui.Separator()
-
-        if tabN == 1 then
-            saveData()
+		
+		if imgui.BeginTabBar('Tabs') then 
+			if imgui.BeginTabItem(u8'Главная') then -- -----------------------------------Главная---------------------------
 
             imgui.Text(u8'Общая статистика: ')
             if imgui.Button(u8'Эта сессия') then
@@ -508,7 +499,6 @@ local mainWindow = imgui.OnFrame(
             imgui.Separator()
 
             if statTab == 1 then
-				--imgui.Columns(2, nil, false)
 				if imgui.BeginChild('Cash', imgui.ImVec2(220, 100), true) then
 					if widget_stat_mode[0] == false then
 						imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
@@ -518,23 +508,21 @@ local mainWindow = imgui.OnFrame(
 						imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
 						imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
 						imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
-						imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
 					end
-					imgui.EndChild() -- обязательно следите за тем, чтобы каждый чайлд был закрыт
+					imgui.EndChild() 
 				end
 				imgui.SameLine()
 				if imgui.BeginChild('Bank', imgui.ImVec2(220, 100), true) then
 					imgui.Text(u8'Зарплата за сегодня: ' .. formatNumber(bankEarn) .. ' $')
 					imgui.Text(u8'Депозит за сегодня: ' .. formatNumber(depEarn) .. ' $')
-					imgui.Text(u8'Итого за сегодня: ' .. 'деняк' .. '$')
-					imgui.EndChild() -- обязательно следите за тем, чтобы каждый чайлд был закрыт
+					imgui.Text(u8'Итого за сегодня: ' .. formatNumber(bankEarn + depEarn) .. '$')
+					imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
+					imgui.EndChild() 
 				end
 
+				imgui.Text(u8'Всего за сегодня: ' .. formatNumber(daySalary + bankEarn + depEarn) .. '$')
 				
-				--
-				--imgui.NextColumn()
-
-				--imgui.Columns(1)
+				imgui.Separator()
 
 				if imgui.Button(u8'Очистить статистику за сессию') then
 					sessionEarn = 0
@@ -551,6 +539,7 @@ local mainWindow = imgui.OnFrame(
 					saveData()
 				end
             end
+
 
             if statTab == 2 then
                 local stats = getWeekStats()
@@ -604,197 +593,201 @@ local mainWindow = imgui.OnFrame(
 				end
 			imgui.EndChild()
 			end
-        end
-
-        if tabN == 2 then
-		imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
-		imgui.SameLine()
-		if imgui.Checkbox(u8'Редактировать', edit_mode) then
-
-		end
-		
-		imgui.Separator()
-		
-		if next(data.salary) == nil then
-			imgui.Text(u8"Нет данных для отображения")
-		else
-			-- Получаем и сортируем даты
-			local sortedOps = {}
-			for date in pairs(data.salary) do
-				table.insert(sortedOps, date)
+				imgui.EndTabItem() -- -----------------------------------Главная (конец)---------------------------
 			end
-			table.sort(sortedOps, function(a, b) return a > b end)
+			if imgui.BeginTabItem(u8'История') then -- -----------------------------------История---------------------------
+				imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
+				imgui.SameLine()
+				if imgui.Checkbox(u8'Редактировать', edit_mode) then
 
-			-- Перебираем даты
-			for _, date in ipairs(sortedOps) do
-				local todayOps = data.salary[date].log
+				end
+				
+				imgui.Separator()
+				
+				if next(data.salary) == nil then
+					imgui.Text(u8"Нет данных для отображения")
+				else
+					-- Получаем и сортируем даты
+					local sortedOps = {}
+					for date in pairs(data.salary) do
+						table.insert(sortedOps, date)
+					end
+					table.sort(sortedOps, function(a, b) return a > b end)
 
-				if todayOps and next(todayOps) then
-					if imgui.CollapsingHeader(u8(date)) then
-						local sortedOperations = {}
-						
-						-- Заполняем массив операций
-						for operationTime, operation in pairs(todayOps) do
-							table.insert(sortedOperations, { time = operationTime, data = operation })
-						end
+					-- Перебираем даты
+					for _, date in ipairs(sortedOps) do
+						local todayOps = data.salary[date].log
 
-						-- Сортируем операции по времени
-						table.sort(sortedOperations, function(a, b) return a.time < b.time end)
-
-						-- Выводим операции
-						for _, op in ipairs(sortedOperations) do
-							local operation = op.data
-							local op_id = date .. "_" .. op.time
-							
-							if edit_mode[0] then
-								-- Режим редактирования
-								imgui.Text(op.time .. ': ' .. operation.sym .. formatNumber(operation.summ) .. " $ ")
-								imgui.SameLine()
+						if todayOps and next(todayOps) then
+							if imgui.CollapsingHeader(u8(date)) then
+								local sortedOperations = {}
 								
-								-- Подготовка списка типов
-								local allTypes = {}
-								local originalTypes = {} -- Сохраняем оригинальные значения
-								
-								-- Добавляем moneyEvents
-								for _, t in ipairs(moneyEvents) do
-									table.insert(allTypes, u8(t.event))
-									table.insert(originalTypes, t.event)
+								-- Заполняем массив операций
+								for operationTime, operation in pairs(todayOps) do
+									table.insert(sortedOperations, { time = operationTime, data = operation })
 								end
-								
-								-- Добавляем customTypes
-								if customTypes and next(customTypes) ~= nil then
-									for _, t in ipairs(customTypes) do
-										table.insert(allTypes, u8(t.event))
-										table.insert(originalTypes, t.event)
-									end
-								end
-								
-								-- Находим текущий индекс
-								local currentIndex = 0
-								local currentType = operation.type or "Операция не определена"
-								for i, typeName in ipairs(originalTypes) do
-									if typeName == currentType then
-										currentIndex = i - 1
-										break
-									end
-								end
-								
-								-- ComboBox
-								local currentIndexPtr = imgui.new.int(currentIndex)
-								local comboName = "##type_" .. date .. "_" .. op.time
-								local imguiTypes = imgui.new['const char*'][#allTypes](allTypes)
-								
-								if imgui.Combo(comboName, currentIndexPtr, imguiTypes, #allTypes) then
-									local selectedIndex = currentIndexPtr[0] + 1
-									if selectedIndex >= 1 and selectedIndex <= #originalTypes then
-										operation.type = originalTypes[selectedIndex]
+
+								-- Сортируем операции по времени
+								table.sort(sortedOperations, function(a, b) return a.time < b.time end)
+
+								-- Выводим операции
+								for _, op in ipairs(sortedOperations) do
+									local operation = op.data
+									local op_id = date .. "_" .. op.time
+									
+									if edit_mode[0] then
+										-- Режим редактирования
+										imgui.Text(op.time .. ': ' .. operation.sym .. formatNumber(operation.summ) .. " $ ")
+										imgui.SameLine()
+										
+										-- Подготовка списка типов
+										local allTypes = {}
+										local originalTypes = {} -- Сохраняем оригинальные значения
+										
+										-- Добавляем moneyEvents
+										for _, t in ipairs(moneyEvents) do
+											table.insert(allTypes, u8(t.event))
+											table.insert(originalTypes, t.event)
+										end
+										
+										-- Добавляем customTypes
+										if customTypes and next(customTypes) ~= nil then
+											for _, t in ipairs(customTypes) do
+												table.insert(allTypes, u8(t.event))
+												table.insert(originalTypes, t.event)
+											end
+										end
+										
+										-- Находим текущий индекс
+										local currentIndex = 0
+										local currentType = operation.type or "Операция не определена"
+										for i, typeName in ipairs(originalTypes) do
+											if typeName == currentType then
+												currentIndex = i - 1
+												break
+											end
+										end
+										
+										-- ComboBox
+										local currentIndexPtr = imgui.new.int(currentIndex)
+										local comboName = "##type_" .. date .. "_" .. op.time
+										local imguiTypes = imgui.new['const char*'][#allTypes](allTypes)
+										
+										if imgui.Combo(comboName, currentIndexPtr, imguiTypes, #allTypes) then
+											local selectedIndex = currentIndexPtr[0] + 1
+											if selectedIndex >= 1 and selectedIndex <= #originalTypes then
+												operation.type = originalTypes[selectedIndex]
+											else
+												operation.type = "Операция не определена"
+											end
+											saveData()
+										end
 									else
-										operation.type = "Операция не определена"
+										-- Обычный режим отображения
+										local color
+										local opType = operation.type or "Операция не определена"
+										if operation.sym == "+" and opType ~= "Операция не определена" then
+											color = imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0])
+										elseif operation.sym == "-" and opType ~= "Операция не определена" then
+											color = imgui.ImVec4(1, 0, 0, settings.widgetAlpha[0])
+										else
+											color = imgui.ImVec4(0.5, 0.5, 0.5, settings.widgetAlpha[0])
+										end
+										imgui.TextColored(color, op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. opType))
 									end
-									saveData()
 								end
-							else
-								-- Обычный режим отображения
-								local color
-								local opType = operation.type or "Операция не определена"
-								if operation.sym == "+" and opType ~= "Операция не определена" then
-									color = imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0])
-								elseif operation.sym == "-" and opType ~= "Операция не определена" then
-									color = imgui.ImVec4(1, 0, 0, settings.widgetAlpha[0])
-								else
-									color = imgui.ImVec4(0.5, 0.5, 0.5, settings.widgetAlpha[0])
-								end
-								imgui.TextColored(color, op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. opType))
+							end
+						else
+							if imgui.CollapsingHeader(u8(date)) then
+								imgui.Text(u8"Нет операций за этот день")
 							end
 						end
 					end
-				else
-					if imgui.CollapsingHeader(u8(date)) then
-						imgui.Text(u8"Нет операций за этот день")
-					end
 				end
+				imgui.EndTabItem() -- ----------------------------------- История (конец)---------------------------
 			end
+			if imgui.BeginTabItem(u8'Настройки') then -- -----------------------------------Настройки---------------------------
+				imgui.Text(u8'Видимость виджета:')
+				imgui.SameLine()
+				if imgui.Checkbox(u8"Включено", settings.widget_visible) then
+					widget_state[0] = settings.widget_visible[0]
+					data.settings.widget_visible = settings.widget_visible[0]
+					saveData()
+				end
+
+				imgui.Text(u8'Режим виджета (ВКЛ - День, ВЫКЛ - Сессия): ')
+				imgui.SameLine()
+				if imgui.Checkbox(u8"День", settings.widget_stat_mode) then
+					widget_stat_mode[0] = settings.widget_stat_mode[0]
+					data.settings.widget_stat_mode = settings.widget_stat_mode[0]
+					saveData()
+				end
+				imgui.Text(u8'Скрывать виджет при активном курсоре (инвентарь, чат...)')
+				imgui.SameLine()
+				if imgui.Checkbox(u8"Скрывать", settings.hideWidgetWhenCursor) then
+					hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
+					data.settings.hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
+					saveData()
+				end
+
+				imgui.Separator()
+				
+				if imgui.Button(u8'Настроить персональные категории') then
+					types_window_state[0] = not types_window_state[0]
+				end
+				
+				imgui.Separator()
+
+				imgui.Text(u8'Позиция виджета:')
+				imgui.SliderInt("X", settings.widget_position.x, 0, screenResX[0] - widget_size.width)
+				imgui.SliderInt("Y", settings.widget_position.y, 0, screenResY[0] - widget_size.height)
+
+				imgui.Separator()
+
+				imgui.Text(u8'Размер виджета:')
+				imgui.SliderInt(u8"Ширина", settings.widget_size.width, 100, 500)
+				imgui.SliderInt(u8"Высота", settings.widget_size.height, 50, 300)
+
+				imgui.Separator()
+
+				imgui.Text(u8"Прозрачность виджета: ")
+				imgui.SliderFloat(u8"0-1", settings.widgetAlpha, 0.0, 1.0)
+				
+				imgui.Separator()
+
+				imgui.Text(u8'Размер шрифта')
+				imgui.SliderInt(u8"Размер", settings.widget_text_size, 5, 20)
+				saveData()
+				imgui.SameLine()
+				if imgui.Button(u8'Применить') then
+					saveData()
+					sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт будет перезагружен...", 0xFFFFFF)
+					main_window_state[0] = false
+					thisScript():reload()
+				end
+
+				imgui.Separator()
+				
+				if imgui.Button(u8"Проверить обновления") then
+					updateWindowState[0] = not updateWindowState[0]
+				end
+				
+				imgui.Separator()
+
+				if imgui.Button(u8'Очистить всю статистику') then
+					earned = 0
+					spended = 0
+					daySalary = 0
+					payDayCount = 0
+					totalOnlineTime = 0
+					data.salary = {}
+					saveData()
+				end
+				imgui.EndTabItem() -- -----------------------------------Настройки (конец)---------------------------
+			end
+			imgui.EndTabBar() -- конец всех вкладок
 		end
-	end
 
-        if tabN == 3 then
-            imgui.Text(u8'Видимость виджета:')
-            imgui.SameLine()
-            if imgui.Checkbox(u8"Включено", settings.widget_visible) then
-                widget_state[0] = settings.widget_visible[0]
-                data.settings.widget_visible = settings.widget_visible[0]
-                saveData()
-            end
-
-            imgui.Text(u8'Режим виджета (ВКЛ - День, ВЫКЛ - Сессия): ')
-            imgui.SameLine()
-            if imgui.Checkbox(u8"День", settings.widget_stat_mode) then
-                widget_stat_mode[0] = settings.widget_stat_mode[0]
-                data.settings.widget_stat_mode = settings.widget_stat_mode[0]
-                saveData()
-            end
-			imgui.Text(u8'Скрывать виджет при активном курсоре (инвентарь, чат...)')
-			imgui.SameLine()
-			if imgui.Checkbox(u8"Скрывать", settings.hideWidgetWhenCursor) then
-                hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
-                data.settings.hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
-                saveData()
-            end
-
-            imgui.Separator()
-			
-			if imgui.Button(u8'Настроить персональные категории') then
-				types_window_state[0] = not types_window_state[0]
-			end
-			
-			imgui.Separator()
-
-            imgui.Text(u8'Позиция виджета:')
-            imgui.SliderInt("X", settings.widget_position.x, 0, screenResX[0] - widget_size.width)
-            imgui.SliderInt("Y", settings.widget_position.y, 0, screenResY[0] - widget_size.height)
-
-            imgui.Separator()
-
-            imgui.Text(u8'Размер виджета:')
-            imgui.SliderInt(u8"Ширина", settings.widget_size.width, 100, 500)
-            imgui.SliderInt(u8"Высота", settings.widget_size.height, 50, 300)
-
-            imgui.Separator()
-
-			imgui.Text(u8"Прозрачность виджета: ")
-			imgui.SliderFloat(u8"0-1", settings.widgetAlpha, 0.0, 1.0)
-			
-			imgui.Separator()
-
-            imgui.Text(u8'Размер шрифта')
-            imgui.SliderInt(u8"Размер", settings.widget_text_size, 5, 20)
-            saveData()
-            imgui.SameLine()
-            if imgui.Button(u8'Применить') then
-                saveData()
-                sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт будет перезагружен...", 0xFFFFFF)
-                main_window_state[0] = false
-                thisScript():reload()
-            end
-
-            imgui.Separator()
-			
-			if imgui.Button(u8"Проверить обновления") then
-				updateWindowState[0] = not updateWindowState[0]
-			end
-			
-			imgui.Separator()
-
-            if imgui.Button(u8'Очистить всю статистику') then
-                earned = 0
-                spended = 0
-                daySalary = 0
-                payDayCount = 0
-                totalOnlineTime = 0
-                data.salary = {}
-                saveData()
-            end
-        end
         imgui.End()
 		if not main_window_state[0] then
 		imgui.GetIO().MouseDrawCursor = false
@@ -809,15 +802,11 @@ local logWindow = imgui.OnFrame(
         imgui.Begin(u8'My Salary: ЧатЛог', log_window_state, imgui.WindowFlags.NoCollapse)
 		player.HideCursor = false
 		
-		-- for _, log in ipairs(chatLog) do
-			-- imgui.Text(u8(log))
-		-- end
 		for _, log in ipairs(chatLog) do
 			logButtonText = string.format("[" .. os.date("%H:%M:%S", log.time) .. "]" .. " " .. log.text)
 			if imgui.Button(u8(logButtonText)) then
 				print(logButtonText)
 			end
-			--imgui.Text(u8(string.format("[" .. log.time .. "]" .. " " .. log.text)))
 		end
 		
         imgui.End()

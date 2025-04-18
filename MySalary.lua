@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.15.1")
+script_version("0.15.2")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -98,7 +98,7 @@ local settings = {
 }
 
 local moneyEvents = {
-	--{chatString="",event=""},
+	--{chatString=" ",event=" "},
 	{chatString="Вы успешно погасили неоплаченные счета за коммунальные услуги", event="Оплата коммунальных услуг"},
 	{chatString="Вы успешно погасили неоплаченные счета за бизнес", event="Оплата налогов на бизнес"},
 	{chatString="Вы успешно продлили аренду своего номера в отеле", event="Оплата отеля"},
@@ -120,6 +120,8 @@ local moneyEvents = {
 	{chatString="Вы сняли со своего банковского счета", event="Снятие денег с банковского счета"},
 	{chatString="Вы положили на свой банковский счет", event="Перевод на банковский счет"},
 	{chatString="Вы положили на свой депозитный счет", event="Перевод на депозитный счет"},
+	{chatString="Вы сняли деньги с депозитного счета", event="Снятие денег с депозитного счета"},
+	{chatString="Вы перевели (.+) игроку (.+) на счет", event="Перевод с банковского счета"},
 	{chatString="Вам был добавлен предмет 'Евро'", event="Покупка Евро"}, -- пофиксить, засчитывается при получении из ларцов
 	{chatString="Вы совершили обмен (.+) на (.+) BTC", event="Покупка BTC"},
 	{chatString="Вы совершили обмен (.+) BTC на (.+)", event="Продажа BTC"},
@@ -543,56 +545,78 @@ local mainWindow = imgui.OnFrame(
 
             if statTab == 2 then
                 local stats = getWeekStats()
-                imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
-                imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
-                imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
-                imgui.Text(u8'PayDay за неделю: ' .. stats.weekPayDay)
+				if imgui.BeginChild('Cash', imgui.ImVec2(220, 100), true) then
+					imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
+					imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
+					imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('Bank', imgui.ImVec2(220, 100), true) then
+					imgui.Text(u8'Зарплата за неделю: ' .. formatNumber(stats.weekBank) .. ' $')
+					imgui.Text(u8'Депозит за неделю: ' .. formatNumber(stats.weekDep) .. ' $')
+					imgui.Text(u8'Итого в банке за неделю: ' .. formatNumber(stats.weekBank + stats.weekDep) .. '$')
+					imgui.Text(u8'PayDay за неделю: ' .. stats.weekPayDay)
+					imgui.EndChild()
+				end
+				imgui.Text(u8'Всего за неделю: ' .. formatNumber(stats.weekSalary + stats.weekBank + stats.weekDep) .. '$')
             end
 
             if statTab == 3 then
                 local stats = getMonthStats()
-                imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
-                imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
-                imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
-                imgui.Text(u8'PayDay за месяц: ' .. stats.monthPayDay)
+				if imgui.BeginChild('Cash', imgui.ImVec2(220, 100), true) then
+					imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
+					imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
+					imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('Bank', imgui.ImVec2(220, 100), true) then
+					imgui.Text(u8'Зарплата за месяц: ' .. formatNumber(stats.monthBank) .. '$')
+					imgui.Text(u8'Депозит за месяц: ' .. formatNumber(stats.monthDep) .. '$')
+					imgui.Text(u8'Итого в банке за месяц: ' .. formatNumber(stats.monthBank + stats.monthDep) .. '$')
+					imgui.Text(u8'PayDay за месяц: ' .. stats.monthPayDay)
+					imgui.EndChild()
+				end
+				imgui.Text(u8'Всего за месяц: ' .. formatNumber(stats.monthSalary + stats.monthBank + stats.monthDep) .. '$')
             end
 
-            imgui.Separator()
-			if imgui.BeginChild("allStats") then
-				imgui.Text(u8'Подневная статистика: ')
+            --imgui.Separator()
+			-- if imgui.BeginChild("allStats") then
+				-- imgui.Text(u8'Подневная статистика: ')
 
-				if next(data.salary) == nil then
-					imgui.Text(u8"Нет данных для отображения")
-				else
-					-- Получаем и сортируем даты в порядке убывания (сначала новые)
-					local sortedDates = {}
-					for date in pairs(data.salary) do
-						table.insert(sortedDates, date)
-					end
-					table.sort(sortedDates, function(a, b) return a > b end) -- Сортировка от новых к старым
+				-- if next(data.salary) == nil then
+					-- imgui.Text(u8"Нет данных для отображения")
+				-- else
+					-- -- Получаем и сортируем даты в порядке убывания (сначала новые)
+					-- local sortedDates = {}
+					-- for date in pairs(data.salary) do
+						-- table.insert(sortedDates, date)
+					-- end
+					-- table.sort(sortedDates, function(a, b) return a > b end) -- Сортировка от новых к старым
 
-					-- Перебираем уже отсортированные даты
-					for _, date in ipairs(sortedDates) do
-						local stats = data.salary[date]
-						if imgui.CollapsingHeader(u8(date)) then
-							imgui.Text(u8'Онлайн за день: ' .. formatTime(1, stats.totalOnlineTime))
-							imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
-							imgui.Separator()
-							imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
-							imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
-							imgui.Separator()
-							imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
-							if date ~= os.date("%Y-%m-%d") then
-								if imgui.Button(u8'Удалить день') then
-									data.salary[date] = nil
-									saveData()
-								end
-							end
-						end
-					end
-				end
-			imgui.EndChild()
-			end
+					-- -- Перебираем уже отсортированные даты
+					-- for _, date in ipairs(sortedDates) do
+						-- local stats = data.salary[date]
+						-- if imgui.CollapsingHeader(u8(date)) then
+							-- imgui.Text(u8'Онлайн за день: ' .. formatTime(1, stats.totalOnlineTime))
+							-- imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
+							-- imgui.Separator()
+							-- imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
+							-- imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
+							-- imgui.Separator()
+							-- imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
+							-- if date ~= os.date("%Y-%m-%d") then
+								-- if imgui.Button(u8'Удалить день') then
+									-- data.salary[date] = nil
+									-- saveData()
+								-- end
+							-- end
+						-- end
+					-- end
+				-- end
+			-- imgui.EndChild()
+			-- end
 				imgui.EndTabItem() -- -----------------------------------Главная (конец)---------------------------
 			end
 			if imgui.BeginTabItem(u8'История') then -- -----------------------------------История---------------------------
@@ -620,6 +644,56 @@ local mainWindow = imgui.OnFrame(
 
 						if todayOps and next(todayOps) then
 							if imgui.CollapsingHeader(u8(date)) then
+
+
+								imgui.Text(u8'Статистика за день:')
+								imgui.Separator()
+								local stats = data.salary[date]
+								imgui.Columns(2)
+								imgui.Text(u8'Онлайн за день: ')
+								imgui.NextColumn()
+								imgui.Text(formatTime(1, stats.totalOnlineTime or 0))
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'PayDay за день: ')
+								imgui.NextColumn()
+								imgui.Text(string.format(stats.payDayCount or 0))
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Доход: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber(stats.earned or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Расход: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber(stats.spended or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Орг. зарплата: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber(stats.bankEarn or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Доход от депозита: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber(stats.depEarn or 0) .. u8' $')
+								imgui.Separator()
+								imgui.Columns(1)
+								imgui.NewLine()
+								imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary + stats.bankEarn + stats.depEarn) .. u8' $')
+								
+								if date ~= os.date("%Y-%m-%d") then
+									if imgui.Button(u8'Удалить день') then
+										data.salary[date] = nil
+										saveData()
+									end
+								end
+								
+								imgui.NewLine()
+								imgui.Text(u8'Зафиксированные операции за день:')
+								imgui.Separator()
+
 								local sortedOperations = {}
 								
 								-- Заполняем массив операций
@@ -987,7 +1061,9 @@ function getWeekStats()
         weekEarned = 0,
         weekSpended = 0,
         weekSalary = 0,
-        weekPayDay = 0
+        weekPayDay = 0,
+		weekBank = 0,
+		weekDep = 0
     }
 
     for i = 0, 6 do
@@ -997,6 +1073,8 @@ function getWeekStats()
             stats.weekSpended = stats.weekSpended + (data.salary[date].spended or 0)
             stats.weekSalary = stats.weekSalary + (data.salary[date].daySalary or 0)
             stats.weekPayDay = stats.weekPayDay + (data.salary[date].payDayCount or 0)
+			stats.weekBank = stats.weekBank + (data.salary[date].bankEarn or 0)
+			stats.weekDep = stats.weekDep + (data.salary[date].depEarn or 0)
         end
     end
 
@@ -1009,7 +1087,9 @@ function getMonthStats()
         monthEarned = 0,
         monthSpended = 0,
         monthSalary = 0,
-        monthPayDay = 0
+        monthPayDay = 0,
+		monthBank = 0,
+		monthDep = 0
     }
 
     for i = 0, 29 do
@@ -1019,6 +1099,8 @@ function getMonthStats()
             stats.monthSpended = stats.monthSpended + (data.salary[date].spended or 0)
             stats.monthSalary = stats.monthSalary + (data.salary[date].daySalary or 0)
             stats.monthPayDay = stats.monthPayDay + (data.salary[date].payDayCount or 0)
+			stats.monthBank = stats.monthBank + (data.salary[date].bankEarn or 0)
+			stats.monthDep = stats.monthDep + (data.salary[date].depEarn or 0)
         end
     end
 
@@ -1206,7 +1288,7 @@ end
 
 function createLog(oTime, summ, sym)
     operationType = "Операция не определена"
-    
+    logString = ""
     for i = #chatLog, 1, -1 do
         local logEntry = chatLog[i]
         -- Проверяем, было ли сообщение не более 5 секунд назад
@@ -1224,6 +1306,7 @@ function createLog(oTime, summ, sym)
             for _, event in ipairs(customTypes) do
                 if string.match(logEntry.text, event.chatString) then
                     operationType = event.event
+					logString = logEntry.text
                     found = true
                     break -- Выходим из цикла по customTypes
                 end
@@ -1234,6 +1317,7 @@ function createLog(oTime, summ, sym)
                 for _, event in ipairs(moneyEvents) do
                     if string.match(logEntry.text, event.chatString) then
                         operationType = event.event
+						logString = logEntry.text
                         found = true
                         break -- Выходим из цикла по moneyEvents
                     end
@@ -1254,10 +1338,50 @@ function createLog(oTime, summ, sym)
         end
     end
     
+	if string.match(logString, "Вы сняли со своего банковского счета") then
+		amount = clearSumm(logString)
+		if amount then
+			bankEarn = bankEarn - amount
+		end
+	end
+	
+	if string.match(logString, "Вы положили на свой банковский счет") then
+		amount = clearSumm(logString)
+			if amount then
+				bankEarn = bankEarn + amount
+			end
+	end
+	
+	if string.match(logString, "Вы положили на свой депозитный счет") then
+		amount = clearSumm(logString)
+			if amount then
+				depEarn = depEarn + amount
+			end
+	end
+	
+	if string.match(logString, "Вы сняли деньги с депозитного счета") then
+		amount = clearSumm(logString)
+			if amount then
+				depEarn = depEarn - amount
+			end
+	end
+	
+	
     lastOperations[os.date("%H:%M:%S", oTime)] = {
         sym = sym,
         summ = summ,
         type = operationType
     }
+end
+
+function clearSumm(logString)
+	local amount_str = logString:match("%$([%d%.]+)")
+	if amount_str then
+		-- Удаляем все НЕ-цифры (включая точки, запятые и другие символы)
+		local cleaned_amount = amount_str:gsub("[^%d]", "")
+		-- Преобразуем в число (без указания системы счисления)
+		amount = tonumber(cleaned_amount)
+		return amount
+	end
 end
 

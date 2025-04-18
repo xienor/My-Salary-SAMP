@@ -1,15 +1,15 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.13.10")
+script_version("0.15.5")
 
 -- Подключение библиотек
 require 'moonloader'
-local imgui = require 'mimgui' -- Используем mimgui
+local imgui = require 'mimgui'
 local events = require 'lib.samp.events'
 local encoding = require 'encoding'
 local ffi = require 'ffi'
-local wm = require 'windows.message'    -- Список событий для окна игры
+local wm = require 'windows.message'
 
 -- Кодировка
 encoding.default = 'CP1251'
@@ -27,8 +27,14 @@ local currentMoney = 0 -- Деньги записанные в скрипте
 local earned = 0 -- Получено денег
 local spended = 0 -- Потрачено денег
 local daySalary = 0 -- Общий доход за день
+local bankEarn = 0 -- Получено на банковский счет
+local depEarn = 0 -- Получено на депозит
+local bankSpend = 0 -- Потрачено со счета в банке
+local depSpend = 0 -- Потрачено с депозитного счета
 
 local lastOperations = {}
+local customTypes = {}
+local editOperation = 0
 
 local payDayCount = 0 -- Количество PayDay за день
 local lastPayDay = 0
@@ -48,8 +54,11 @@ local timeMins = 0 -- Онлайн минут
 local timeHours = 0 -- Онлайн часов
 
 -- Вкладки
-local tabN = 1
 local statTab = 1
+
+-- Лог серверных сообщений
+
+local chatLog = {}
 
 -- Экран
 local screenResX = imgui.new.int(1920)
@@ -58,11 +67,18 @@ local screenResY = imgui.new.int(1080)
 -- Настройки
 local hidden = imgui.new.bool(false)
 local wasCursorActive = false
-local new = imgui.new
+local new, str, sizeof = imgui.new, ffi.string, ffi.sizeof
+local nameInputField = new.char[256]()
+local descInputField = new.char[256]()
 
 -- Переменные характеристик скрипта
 local widget_state = imgui.new.bool(true) -- Видимость виджета
 local main_window_state = imgui.new.bool(false) -- Видимость главного окна
+local log_window_state = imgui.new.bool(false) -- Видимость окна логов
+local types_window_state = imgui.new.bool(false) -- Видимость окна пользовательских типов операций
+local edit_window_state = imgui.new.bool(false) -- Видимость окна пользовательских типов операций-------------------------------------------------
+local local_checkbox_state = imgui.new.bool(false)
+local edit_mode = imgui.new.bool(false) -- Видимость окна пользовательских типов операций-----------------------------------------------------------------
 local widget_position = { x = 1500, y = 190 } -- Позиция виджета
 local widget_size = { width = 200, height = 90 } -- Размер виджета
 local widget_text_size = imgui.new.int(14) -- Размер текста
@@ -81,6 +97,80 @@ local settings = {
 	widgetAlpha = imgui.new.float(1.0)
 }
 
+local moneyEvents = {
+	{chatString="emptyemptyemptyempty",event=" "},
+	{chatString="Вы успешно погасили неоплаченные счета за коммунальные услуги", event="Оплата коммунальных услуг"},
+	{chatString="Вы успешно погасили неоплаченные счета за бизнес", event="Оплата налогов на бизнес"},
+	{chatString="Вы успешно продлили аренду своего номера в отеле", event="Оплата отеля"},
+	{chatString="Вы успешно продали бочку", event="Продажа бочки с нефтью"},
+	{chatString="пополнили счёт дома за электроэнергию", event="Оплата электроэнергии"},
+	{chatString="Вы оплатили все налоги на сумму", event="Оплата всех налогов"},
+	{chatString="выдаётся за каждого пациента", event="Премия за лечение"},
+	{chatString="Вас вылечил медик", event="Оплата за лечение"},
+	{chatString="за платную парковку", event="Оплата парковки"},
+	{chatString="Вы получили награды за выполнение задания", event="Награда за задание"},
+	{chatString="Вы начали лечение (.+) от укропозависимости", event="Излечение от укропозависимости"},
+	{chatString="Ваша зависимость от укропа упала до нуля", event="Лечение от укропозависимости"},
+	{chatString="Вы успешно купили", event="Покупка предмета"},
+	{chatString="Вы успешно продали", event="Продажа предмета"},
+	{chatString="К сожалению ты ничего не выиграл", event="Розыгрыш у Милтона"},
+	{chatString="Вы успешно обменяли (.+) на (.+) AZ Coins", event="Покупка AZ на ЦР"},
+	{chatString="Вы приобрели Быстрый билет", event="Покупка лотерейного билета"},
+	{chatString="Вы включили выбранный трек", event="Включение музыки на ЦР"},
+	{chatString="Вы сняли со своего банковского счета", event="Снятие денег с банковского счета"},
+	{chatString="Вы положили на свой банковский счет", event="Перевод на банковский счет"},
+	{chatString="Вы положили на свой депозитный счет", event="Перевод на депозитный счет"},
+	{chatString="Вы сняли деньги с депозитного счета", event="Снятие денег с депозитного счета"},
+	{chatString="Вы перевели (.+) игроку (.+) на счет", event="Перевод с банковского счета"},
+	{chatString="Вам был добавлен предмет 'Евро'", event="Покупка Евро"}, -- пофиксить, засчитывается при получении из ларцов
+	{chatString="Вы совершили обмен (.+) на (.+) BTC", event="Покупка BTC"},
+	{chatString="Вы совершили обмен (.+) BTC на (.+)", event="Продажа BTC"},
+	{chatString="Вы совершили обмен (.+) ASC на (.+)", event="Продажа ASC"},
+	{chatString="Вы совершили обмен (.+) на (.+) ASC", event="Покупка ASC"},
+	{chatString="На миникарте отмечено место, где расположен дом", event="Поиск дома /findi"},
+	{chatString="На миникарте отмечено место, где расположен бизнес", event="Поиск бизнеса /findi"},
+	{chatString="Благодаря улучшениям вашей семьи вы получаете", event="Зарплата на работе"},
+	{chatString="Пассажир оплатил билет", event="Доплата за пассажиров"},
+	{chatString="Вы немного перекусили", event="Питание в ларьке"},
+	{chatString="Вы получили (.+)!", event="Получение денег из рулеток"},
+	{chatString="Вам начислено", event="Получение денег из ларцов"},
+	{chatString="Клиент оплатил:", event="Зарплата таксиста"},
+	{chatString="Вы успешно использовали медикаменты и вылечили пациента", event="Лечение NPC"},
+	{chatString="Вы получили (.+) за ящик с медикаментами", event="Нелегальная доставка медикаментов"},
+	{chatString="доставил 100 медикаментов на склад больницы", event="Доставка медикаментов"},
+	{chatString="Выберите дом куда доставить продукты", event="Заказ продуктов в дом"},
+	{chatString="Вы успешно заказали (.+) продуктов для", event="Заказ продуктов в бизнес"},
+	{chatString="Вам был добавлен предмет 'Осколок Истока'", event="Задания для бизнеса"},
+	{chatString="Вы положили на склад", event="Положили на склад"},
+	{chatString="Вы успешно достали из склада", event="Взяли со склада"},
+	{chatString="Вы успешно сделали ставку на контейнер", event="Ставка на контейнер"},
+	{chatString="Вам был добавлен предмет 'Фишки для казино'", event="Покупка фишек"},
+	{chatString="Вот Ваши вещи. С Вас", event="Получение товаров в пункте выдачи"},
+	{chatString="Вы успешно арендовали это ТС", event="Аренда транспорта"},
+	{chatString="Вы пожертвовали (.+) на развитие штата!", event="Пожертвование"},
+	{chatString="Вы купили (.+) боеприпасами за", event="Покупка оружия"},
+	{chatString="Процесс заправки завершён", event="Заправка ТС"},
+	{chatString="Вы оплатили (.+) наличными за установку", event="Тюнинг ТС"},
+	{chatString="Работы по покраске автомобиля завершены", event="Покраска ТС"},
+	{chatString="Вы успешно поставили ставку на выбранный матч", event="Ставка в букмекерской конторе"},
+	{chatString="Вы подали заявление на страхование имущества", event="Страхование имущества"},
+	{chatString="Товар добавлен в корзину", event="Тюнинг ТС"},
+	{chatString="Вы купили обручальные кольца", event="Покупка обручальных колец"},
+	{chatString="Вы арендовали транспорт", event="Аренда транспорта"},
+	{chatString="купил у вас (.+) вы получили", event="Продажа предмета"},
+	{chatString="Вы успешно приобрели билет на фильм", event="Покупка билета в кино"},
+	{chatString="Вы успешно приобрели (.+) VC-долларов за", event="Покупка VC"},
+	{chatString="Вы успешно обменяли (.+) VC-долларов на", event="Продажа VC"},
+	{chatString="Ты купил разрешение на добычу ресурсов", event="Покупка разрешения на добычу ресурсов"},
+	{chatString="Вы приобрели (.+) семян за", event="Покупка семян на ферме"},
+	{chatString="Отлично! Держите вашу пилу. Продуктивного рабочего дня!", event="Покупка бензопилы на ферме"},
+	{chatString="Салам брат, что надо?", event="Дела с Гурамом"},
+	{chatString="(.+) разбирает аксессуар (.+)", event="Разборка аксессуара"},
+	{chatString="Хороший товар! Держи свои деньги!", event="Продажа ресурсов Ларри"},
+	{chatString="Чтобы добыть полезные ископаемые, подойдите к месторождению!", event="Покупка инструмента у Ларри"},
+	{chatString="Прочность предмета успешно восстановлена!", event="Ремонт аксессуаров"}
+}
+
 -- Путь к JSON-файлу
 local path = getWorkingDirectory() .. "\\config\\MySalary[Data].json"
 
@@ -96,7 +186,8 @@ local data = {
         widget_stat_mode = true,
 		widgetAlpha = 1.0
     },
-    update_date = "" -- Последняя дата обновления
+    update_date = "", -- Последняя дата обновления
+	savedTypes = {}
 }
 
 -- Инициализация файла
@@ -120,12 +211,24 @@ function loadData()
         daySalary = data.salary[currentDate].daySalary or 0
         totalOnlineTime = data.salary[currentDate].totalOnlineTime or 0
         payDayCount = data.salary[currentDate].payDayCount or 0
+		bankEarn = data.salary[currentDate].bankEarn or 0
+		depEarn = data.salary[currentDate].depEarn or 0
+		bankSpend = data.salary[currentDate].bankSpend or 0
+		depSpend = data.salary[currentDate].depSpend or 0
+		lastOperations = data.salary[currentDate].log or {}
+		customTypes = data.savedTypes or {}
     else
         earned = 0
         spended = 0
         daySalary = 0
         totalOnlineTime = 0
         payDayCount = 0
+		bankEarn = 0 
+		depEarn = 0
+		bankSpend = 0
+		depSpend = 0
+		lastOperations = {}
+		customTypes = data.savedTypes or {}
     end
 
     -- Загрузка настроек
@@ -160,23 +263,40 @@ function saveData()
         spended = spended,
         daySalary = daySalary,
 		payDayCount = payDayCount,
-		totalOnlineTime = totalOnlineTime
-    }
-    data.update_date = currentDate
+		totalOnlineTime = totalOnlineTime,
+		bankEarn = bankEarn,
+		depEarn = depEarn,
+		bankSpend = bankSpend,
+		depSpend = depSpend,
+		log = lastOperations or {}
+		}
+		data.update_date = currentDate
+		data.savedTypes = customTypes or {}
 	else
 		earned = 0
 		spended = 0
 		daySalary = 0
 		totalOnlineTime = 0
 		payDayCount = 0
+		bankEarn = 0
+		depEarn = 0
+		bankSpend = 0
+		depSpend = 0
+		lastOperations = {}
 		data.salary[currentDate] = {
         earned = earned,
         spended = spended,
         daySalary = daySalary,
 		payDayCount = payDayCount,
+		bankEarn = bankEarn,
+		depEarn = depEarn,
+		bankSpend = bankSpend,
+		depSpend = depSpend,
 		totalOnlineTime = totalOnlineTime,
-    }
-    data.update_date = currentDate
+		log = {}
+		}
+		data.update_date = currentDate
+		data.savedTypes = customTypes or {}
 	end
 
     -- Сохранение настроек
@@ -206,6 +326,7 @@ function main()
     while not isSampAvailable() do wait(0) end
 	wait(1000)
     sampRegisterChatCommand("msalary", openMainWindow)
+	sampRegisterChatCommand("mslog", openChatLog)
 	setScreenResolution()
     loadData()
 	wait(1000)
@@ -225,13 +346,18 @@ function main()
 				if sampIsLocalPlayerSpawned() then -- Защита от вылетов (не учитывает операции в случае дисконекта)
 					playerMoney = getPlayerMoney(Player)
 					if currentMoney < playerMoney then
-						earned = earned + (playerMoney - currentMoney)
+						opEarn = playerMoney - currentMoney
+						earned = earned + opEarn
 						sessionEarn = sessionEarn + (playerMoney - currentMoney)
-						lastOperations[os.date("%H:%M:%S")] = string.format('+' .. formatNumber((playerMoney - currentMoney)) .. ' $')
+						local operationTime = os.time()
+						createLog(operationTime, opEarn, "+")
 					elseif currentMoney > playerMoney then
-						spended = spended - (currentMoney - playerMoney)
+						opSpend = currentMoney - playerMoney
+						spended = spended - opSpend
 						sessionSpend = sessionSpend - (currentMoney - playerMoney)
-						lastOperations[os.date("%H:%M:%S")] = string.format('-' .. formatNumber((currentMoney - playerMoney)) .. ' $')
+						local operationTime = os.time()
+						createLog(operationTime, opSpend, "-")
+						
 					end
 					daySalary = earned + spended
 					sessSalary = sessionEarn + sessionSpend
@@ -348,25 +474,14 @@ local widget = imgui.OnFrame(
 local mainWindow = imgui.OnFrame(
 	function() return main_window_state[0] end,
 	function(player)
-		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+		imgui.SetNextWindowSize(imgui.ImVec2(650, 450), imgui.Cond.FirstUseEver)
         imgui.Begin(u8'My Salary: Главное окно', main_window_state, imgui.WindowFlags.NoCollapse)
 		player.HideCursor = false
-        if imgui.Button(u8'Статистика') then
-            tabN = 1
-        end
-        imgui.SameLine()
-        if imgui.Button(u8'Последние операции') then
-            tabN = 2
-        end
-        imgui.SameLine()
-        if imgui.Button(u8'Настройки') then
-            tabN = 3
-        end
-
-        imgui.Separator()
-
-        if tabN == 1 then
-            saveData()
+		
+		statsChildWidth = imgui.new.float(imgui.GetWindowWidth() * 0.45)
+		
+		if imgui.BeginTabBar('Tabs') then 
+			if imgui.BeginTabItem(u8'Главная') then -- -----------------------------------Главная---------------------------
 
             imgui.Text(u8'Общая статистика: ')
             if imgui.Button(u8'Эта сессия') then
@@ -388,16 +503,35 @@ local mainWindow = imgui.OnFrame(
             imgui.Separator()
 
             if statTab == 1 then
-				imgui.Columns(2, nil, false)
-				imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
-				imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
-				imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
-				imgui.NextColumn()
-				imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
-				imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
-				imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
-				imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
-				imgui.Columns(1)
+				if imgui.BeginChild('Cash', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					if widget_stat_mode[0] == false then
+						imgui.Text(u8'Онлайн за сессию: ' .. formatTime(2, 0))
+						imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
+						imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
+						imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
+					else
+						imgui.Text(u8'Онлайн за сегодня: ' .. formatTime(0, 0))
+						imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
+						imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
+						imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
+					end
+					imgui.EndChild() 
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('Bank', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Пополнение счета за сегодня: ' .. formatNumber(bankEarn) .. ' $')
+					imgui.Text(u8'Списание с счета за сегодня: ' .. formatNumber(bankSpend) .. '$')
+					imgui.Text(u8'Пополнение депозита за сегодня: ' .. formatNumber(depEarn) .. ' $')
+					imgui.Text(u8'Списание с депозита за сегодня: ' .. formatNumber(depSpend) .. '$')
+					itogBank = (bankEarn - bankSpend) + (depEarn - depSpend)
+					imgui.Text(u8'Итого в банке за сегодня: ' .. formatNumber(itogBank) .. '$')
+					imgui.Text(u8'PayDay получено за сегодня: ' .. payDayCount)
+					imgui.EndChild() 
+				end
+
+				imgui.Text(u8'Всего за сегодня: ' .. formatNumber(daySalary + itogBank) .. '$')
+				
+				imgui.Separator()
 
 				if imgui.Button(u8'Очистить статистику за сессию') then
 					sessionEarn = 0
@@ -406,151 +540,445 @@ local mainWindow = imgui.OnFrame(
 				end
 				imgui.SameLine()
 				if imgui.Button(u8'Очистить статистику за сегодня') then
+					currentDate = getCurrentDate()
 					earned = 0
 					spended = 0
 					daySalary = 0
 					totalOnlineTime = 0
 					payDayCount = 0
+					depEarn = 0
+					depSpend = 0
+					bankEarn = 0
+					bankSpend = 0
+					data.salary[currentDate].log = {}
+					lastOperations = {}
 					saveData()
+					loadData()
+					
 				end
             end
 
+
             if statTab == 2 then
                 local stats = getWeekStats()
-                imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
-                imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
-                imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
-                imgui.Text(u8'PayDay за неделю: ' .. stats.weekPayDay)
+				if imgui.BeginChild('Cash', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Онлайн за неделю: ' .. formatTime(1, stats.weekOnline))
+					imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
+					imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
+					imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('Bank', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Пополнение счета за неделю: ' .. formatNumber(stats.weekBankEarn) .. ' $')
+					imgui.Text(u8'Списание с счета за неделю: ' .. formatNumber(stats.weekBankSpend) .. '$')
+					imgui.Text(u8'Пополнение депозита за неделю: ' .. formatNumber(stats.weekDepEarn) .. ' $')
+					imgui.Text(u8'Списание с депозита за неделю: ' .. formatNumber(stats.weekDepSpend) .. '$')
+					itogBank = (stats.weekBankEarn - stats.weekBankSpend) + (stats.weekDepEarn + stats.weekDepSpend)
+					imgui.Text(u8'Итого в банке за неделю: ' .. formatNumber(itogBank) .. '$')
+					imgui.Text(u8'PayDay за неделю: ' .. stats.weekPayDay)
+					imgui.EndChild()
+				end
+				imgui.Text(u8'Всего за неделю: ' .. formatNumber(stats.weekSalary + itogBank) .. '$')
             end
 
             if statTab == 3 then
                 local stats = getMonthStats()
-                imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
-                imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
-                imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
-                imgui.Text(u8'PayDay за месяц: ' .. stats.monthPayDay)
+				if imgui.BeginChild('Cash', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Онлайн за месяц: ' .. formatTime(1, stats.monthOnline))
+					imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
+					imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
+					imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
+					imgui.EndChild()
+				end
+				imgui.SameLine()
+				if imgui.BeginChild('Bank', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Пополнение счета за месяц: ' .. formatNumber(stats.monthBankEarn) .. '$')
+					imgui.Text(u8'Списание с счета за месяц: ' .. formatNumber(stats.monthBankSpend) .. '$')
+					imgui.Text(u8'Пополнение депозита за месяц: ' .. formatNumber(stats.monthDepEarn) .. '$')
+					imgui.Text(u8'Списание с депозита за месяц: ' .. formatNumber(stats.monthDepSpend) .. '$')
+					itogBank = (stats.monthBankEarn - stats.monthBankSpend) + (stats.monthDepEarn - stats.monthDepSpend)
+					imgui.Text(u8'Итого в банке за месяц: ' .. formatNumber(itogBank) .. '$')
+					imgui.Text(u8'PayDay за месяц: ' .. stats.monthPayDay)
+					imgui.EndChild()
+				end
+				imgui.Text(u8'Всего за месяц: ' .. formatNumber(stats.monthSalary + itogBank) .. '$')
             end
+			
+				imgui.EndTabItem() -- -----------------------------------Главная (конец)---------------------------
+			end
+			if imgui.BeginTabItem(u8'История') then -- -----------------------------------История---------------------------
+				imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
+				imgui.SameLine()
+				if imgui.Checkbox(u8'Редактировать', edit_mode) then
 
-            imgui.Separator()
-			if imgui.BeginChild("allStats") then
-				imgui.Text(u8'Подневная статистика: ')
-
+				end
+				
+				imgui.Separator()
+				
 				if next(data.salary) == nil then
 					imgui.Text(u8"Нет данных для отображения")
 				else
-					-- Получаем и сортируем даты в порядке убывания (сначала новые)
-					local sortedDates = {}
+					-- Получаем и сортируем даты
+					local sortedOps = {}
 					for date in pairs(data.salary) do
-						table.insert(sortedDates, date)
+						table.insert(sortedOps, date)
 					end
-					table.sort(sortedDates, function(a, b) return a > b end) -- Сортировка от новых к старым
+					table.sort(sortedOps, function(a, b) return a > b end)
 
-					-- Перебираем уже отсортированные даты
-					for _, date in ipairs(sortedDates) do
+					-- Перебираем даты
+					for _, date in ipairs(sortedOps) do
+						local todayOps = data.salary[date].log
 						local stats = data.salary[date]
-						if imgui.CollapsingHeader(u8(date)) then
-							imgui.Text(u8'Онлайн за день: ' .. formatTime(1, stats.totalOnlineTime))
-							imgui.Text(u8'PayDay за день: ' .. stats.payDayCount)
-							imgui.Separator()
-							imgui.Text(u8'Доход: ' .. formatNumber(stats.earned) .. u8' $')
-							imgui.Text(u8'Расход: ' .. formatNumber(stats.spended) .. u8' $')
-							imgui.Separator()
-							imgui.Text(u8'Итог: ' .. formatNumber(stats.daySalary) .. u8' $')
-							if date ~= os.date("%Y-%m-%d") then
-								if imgui.Button(u8'Удалить день') then
-									data.salary[date] = nil
-									saveData()
+						
+						if stats then
+							if imgui.CollapsingHeader(u8(date)) then
+								imgui.Text(u8'Статистика за день:')
+								imgui.Separator()
+								imgui.Columns(2)
+								imgui.Text(u8'Онлайн за день: ')
+								imgui.NextColumn()
+								imgui.Text(formatTime(1, (stats.totalOnlineTime) or 0))
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'PayDay за день: ')
+								imgui.NextColumn()
+								imgui.Text(string.format((stats.payDayCount) or 0))
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Доход: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber((stats.earned) or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Расход: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber((stats.spended) or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Пополнение счета в банке: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber((stats.bankEarn) or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Списание со счета в банке: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber((stats.bankSpend) or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Доход от депозита от депозита: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber((stats.depEarn) or 0) .. u8' $')
+								imgui.Separator()
+								imgui.NextColumn()
+								imgui.Text(u8'Списание с депозита: ')
+								imgui.NextColumn()
+								imgui.Text(formatNumber((stats.depSpend) or 0) .. u8' $')
+								imgui.Separator()
+								imgui.Columns(1)
+								imgui.NewLine()
+								imgui.Text(u8'Итог: ' .. formatNumber((stats.daySalary or 0) + (stats.bankEarn or 0) - (stats.bankSpend or 0) + (stats.depEarn or 0) - (stats.depSpend or 0)) .. u8' $')
+								
+								if date ~= os.date("%Y-%m-%d") then
+									if imgui.Button(u8'Удалить день') then
+										data.salary[date] = nil
+										saveData()
+									end
+								end
+								
+								imgui.NewLine()
+								imgui.Text(u8'Зафиксированные операции за день:')
+									
+								if todayOps and next(todayOps) then
+									
+									imgui.Separator()
+
+									local sortedOperations = {}
+									
+									-- Заполняем массив операций
+									for operationTime, operation in pairs(todayOps) do
+										table.insert(sortedOperations, { time = operationTime, data = operation })
+									end
+
+									-- Сортируем операции по времени
+									table.sort(sortedOperations, function(a, b) return a.time < b.time end)
+
+									-- Выводим операции
+									for _, op in ipairs(sortedOperations) do
+										local operation = op.data
+										local op_id = date .. "_" .. op.time
+										
+										if edit_mode[0] then
+											-- Режим редактирования
+											imgui.Text(op.time .. ': ' .. operation.sym .. formatNumber(operation.summ) .. " $ ")
+											imgui.SameLine()
+											
+											-- Подготовка списка типов
+											local allTypes = {}
+											local originalTypes = {} -- Сохраняем оригинальные значения
+											
+											-- Добавляем moneyEvents
+											for _, t in ipairs(moneyEvents) do
+												table.insert(allTypes, u8(t.event))
+												table.insert(originalTypes, t.event)
+											end
+											
+											-- Добавляем customTypes
+											if customTypes and next(customTypes) ~= nil then
+												for _, t in ipairs(customTypes) do
+													table.insert(allTypes, u8(t.event))
+													table.insert(originalTypes, t.event)
+												end
+											end
+											
+											-- Находим текущий индекс
+											local currentIndex = 0
+											local currentType = operation.type or "Операция не определена"
+											for i, typeName in ipairs(originalTypes) do
+												if typeName == currentType then
+													currentIndex = i - 1
+													break
+												end
+											end
+											
+											-- ComboBox
+											local currentIndexPtr = imgui.new.int(currentIndex)
+											local comboName = "##type_" .. date .. "_" .. op.time
+											local imguiTypes = imgui.new['const char*'][#allTypes](allTypes)
+											
+											if imgui.Combo(comboName, currentIndexPtr, imguiTypes, #allTypes) then
+												local selectedIndex = currentIndexPtr[0] + 1
+												if selectedIndex >= 1 and selectedIndex <= #originalTypes then
+													operation.type = originalTypes[selectedIndex]
+												else
+													operation.type = "Операция не определена"
+												end
+												saveData()
+											end
+										else
+											-- Обычный режим отображения
+											local color
+											local opType = operation.type or "Операция не определена"
+											if operation.sym == "+" and opType ~= "Операция не определена" then
+												color = imgui.ImVec4(0, 1, 0, settings.widgetAlpha[0])
+											elseif operation.sym == "-" and opType ~= "Операция не определена" then
+												color = imgui.ImVec4(1, 0, 0, settings.widgetAlpha[0])
+											else
+												color = imgui.ImVec4(0.5, 0.5, 0.5, settings.widgetAlpha[0])
+											end
+											imgui.TextColored(color, op.time .. ': ' .. u8(operation.sym .. formatNumber(operation.summ) .. " $" .. " " .. opType))
+										end
+									end
+								else
+									imgui.Text(u8"Нет операций за этот день")
 								end
 							end
 						end
 					end
 				end
-			imgui.EndChild()
-			end
-        end
-
-        if tabN == 2 then
-            imgui.Text(u8'Дата и время: ' .. os.date("%d.%m.%Y") .. ', ' .. os.date("%X", os.time()))
-            imgui.Separator()
-            for operationTime, summ in pairs(lastOperations) do
-                imgui.Text(operationTime .. ': ' .. summ)
-            end
-        end
-
-        if tabN == 3 then
-            imgui.Text(u8'Видимость виджета:')
-            imgui.SameLine()
-            if imgui.Checkbox(u8"Включено", settings.widget_visible) then
-                widget_state[0] = settings.widget_visible[0]
-                data.settings.widget_visible = settings.widget_visible[0]
-                saveData()
-            end
-
-            imgui.Text(u8'Режим виджета (ВКЛ - День, ВЫКЛ - Сессия): ')
-            imgui.SameLine()
-            if imgui.Checkbox(u8"День", settings.widget_stat_mode) then
-                widget_stat_mode[0] = settings.widget_stat_mode[0]
-                data.settings.widget_stat_mode = settings.widget_stat_mode[0]
-                saveData()
-            end
-			imgui.Text(u8'Скрывать виджет при активном курсоре (инвентарь, чат...)')
-			imgui.SameLine()
-			if imgui.Checkbox(u8"Скрывать", settings.hideWidgetWhenCursor) then
-                hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
-                data.settings.hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
-                saveData()
-            end
-
-            imgui.Separator()
-
-            imgui.Text(u8'Позиция виджета:')
-            imgui.SliderInt("X", settings.widget_position.x, 0, screenResX[0] - widget_size.width)
-            imgui.SliderInt("Y", settings.widget_position.y, 0, screenResY[0] - widget_size.height)
-
-            imgui.Separator()
-
-            imgui.Text(u8'Размер виджета:')
-            imgui.SliderInt(u8"Ширина", settings.widget_size.width, 100, 500)
-            imgui.SliderInt(u8"Высота", settings.widget_size.height, 50, 300)
-
-            imgui.Separator()
-
-			imgui.Text(u8"Прозрачность виджета: ")
-			imgui.SliderFloat(u8"0-1", settings.widgetAlpha, 0.0, 1.0)
-			
-			imgui.Separator()
-
-            imgui.Text(u8'Размер шрифта')
-            imgui.SliderInt(u8"Размер", settings.widget_text_size, 5, 20)
-            saveData()
-            imgui.SameLine()
-            if imgui.Button(u8'Применить') then
-                saveData()
-                sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт будет перезагружен...", 0xFFFFFF)
-                main_window_state[0] = false
-                thisScript():reload()
-            end
-
-            imgui.Separator()
-			
-			if imgui.Button(u8"Проверить обновления") then
-				updateWindowState[0] = not updateWindowState[0]
+				imgui.EndTabItem() -- ----------------------------------- История (конец)---------------------------
 			end
 			
-			imgui.Separator()
+			if imgui.BeginTabItem(u8'Настройки') then -- -----------------------------------Настройки---------------------------
+				imgui.Text(u8'Видимость виджета:')
+				imgui.SameLine()
+				if imgui.Checkbox(u8"Включено", settings.widget_visible) then
+					widget_state[0] = settings.widget_visible[0]
+					data.settings.widget_visible = settings.widget_visible[0]
+					saveData()
+				end
 
-            if imgui.Button(u8'Очистить всю статистику') then
-                earned = 0
-                spended = 0
-                daySalary = 0
-                payDayCount = 0
-                totalOnlineTime = 0
-                data.salary = {}
-                saveData()
-            end
-        end
+				imgui.Text(u8'Режим виджета (ВКЛ - День, ВЫКЛ - Сессия): ')
+				imgui.SameLine()
+				if imgui.Checkbox(u8"День", settings.widget_stat_mode) then
+					widget_stat_mode[0] = settings.widget_stat_mode[0]
+					data.settings.widget_stat_mode = settings.widget_stat_mode[0]
+					saveData()
+				end
+				imgui.Text(u8'Скрывать виджет при активном курсоре (инвентарь, чат...)')
+				imgui.SameLine()
+				if imgui.Checkbox(u8"Скрывать", settings.hideWidgetWhenCursor) then
+					hideWidgetWhenCursor[0] = settings.hideWidgetWhenCursor[0]
+					data.settings.hideWidgetWhenCursor = settings.hideWidgetWhenCursor[0]
+					saveData()
+				end
+
+				imgui.Separator()
+				
+				if imgui.Button(u8'Настроить персональные категории') then
+					types_window_state[0] = not types_window_state[0]
+				end
+				
+				imgui.Separator()
+
+				imgui.Text(u8'Позиция виджета:')
+				imgui.SliderInt("X", settings.widget_position.x, 0, screenResX[0] - widget_size.width)
+				imgui.SliderInt("Y", settings.widget_position.y, 0, screenResY[0] - widget_size.height)
+
+				imgui.Separator()
+
+				imgui.Text(u8'Размер виджета:')
+				imgui.SliderInt(u8"Ширина", settings.widget_size.width, 100, 500)
+				imgui.SliderInt(u8"Высота", settings.widget_size.height, 50, 300)
+
+				imgui.Separator()
+
+				imgui.Text(u8"Прозрачность виджета: ")
+				imgui.SliderFloat(u8"0-1", settings.widgetAlpha, 0.0, 1.0)
+				
+				imgui.Separator()
+
+				imgui.Text(u8'Размер шрифта')
+				imgui.SliderInt(u8"Размер", settings.widget_text_size, 5, 20)
+				saveData()
+				imgui.SameLine()
+				if imgui.Button(u8'Применить') then
+					saveData()
+					sampAddChatMessage("{674ea7}[My Salary] {FFFFFF}Скрипт будет перезагружен...", 0xFFFFFF)
+					main_window_state[0] = false
+					thisScript():reload()
+				end
+
+				imgui.Separator()
+				
+				if imgui.Button(u8"Проверить обновления") then
+					updateWindowState[0] = not updateWindowState[0]
+				end
+				
+				imgui.Separator()
+
+				if imgui.Button(u8'Очистить всю статистику') then
+					earned = 0
+					spended = 0
+					daySalary = 0
+					payDayCount = 0
+					totalOnlineTime = 0
+					data.salary = {}
+					saveData()
+				end
+				imgui.EndTabItem() -- -----------------------------------Настройки (конец)---------------------------
+			end
+			imgui.EndTabBar() -- конец всех вкладок
+		end
+
         imgui.End()
 		if not main_window_state[0] then
+		imgui.GetIO().MouseDrawCursor = false
+		end
+    end
+)
+
+local logWindow = imgui.OnFrame(
+	function() return log_window_state[0] end,
+	function(player)
+		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8'My Salary: ЧатЛог', log_window_state, imgui.WindowFlags.NoCollapse)
+		player.HideCursor = false
+		
+		for _, log in ipairs(chatLog) do
+			logButtonText = string.format("[" .. os.date("%H:%M:%S", log.time) .. "]" .. " " .. log.text)
+			if imgui.Button(u8(logButtonText)) then
+				print(logButtonText)
+			end
+		end
+		
+        imgui.End()
+		if not log_window_state[0] then
+		imgui.GetIO().MouseDrawCursor = false
+		end
+    end
+)
+
+local typesWindow = imgui.OnFrame(
+    function() return types_window_state[0] end,
+    function(player)
+        imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8'My Salary: Персональные категории', types_window_state, imgui.WindowFlags.NoCollapse)
+        player.HideCursor = false
+        
+        -- Добавляем состояние для чекбокса
+        
+
+        if imgui.CollapsingHeader(u8'Инструкция') then
+            imgui.Text(u8'В этом разделе вы можете задать свои типы категорий для статистики.')
+            imgui.Text(u8'Для добавления своей категории нужно заполнить 2 поля и нажать кнопку - Добавть')
+            imgui.Text(u8'В поле Название - введите то как вы хотите чтобы операция отображалась.')
+            imgui.Text(u8'В поле Описание - введите строку которая выводится в час после успешного завершения операции.')
+            imgui.Text(u8'Не вводите такие символы как $ [ ]')
+            imgui.Text(u8'Важно чтобы то что вы ввели в поле Описание появлялось по завершению КАЖДОЙ операции.')
+            imgui.Text(u8'Обратите внимание также на буквы, очень важно вводить все дословно и точно: Ё должна быть Ё а не Е.')
+        end
+        
+        if imgui.InputText(u8"Название", nameInputField, sizeof(descInputField)) then
+        end
+            
+        -- Показываем поле описания только если чекбокс неактивен
+        if not local_checkbox_state[0] then
+            if imgui.InputText(u8"Описание", descInputField, sizeof(descInputField)) then
+            end
+        end
+            
+        if imgui.Button(u8'Добавить') then
+            local descSrt = u8:decode(ffi.string(nameInputField))
+            -- Используем фиксированное описание если чекбокс активен
+            local nameStr = local_checkbox_state[0] and "locallocallocallocal" or u8:decode(ffi.string(descInputField))
+            
+            table.insert(customTypes, {
+                chatString = nameStr,
+                event = descSrt
+            })
+            ffi.fill(nameInputField, sizeof(nameInputField), 0)
+            ffi.fill(descInputField, sizeof(descInputField), 0)
+        end
+        
+        -- Добавляем чекбокс на ту же линию что и кнопка
+        imgui.SameLine()
+        imgui.Checkbox(u8"Локальная", local_checkbox_state)
+
+        imgui.Separator()
+        
+        if next(customTypes) == nil then
+            imgui.Text(u8'Не создано ни одной персональной категории')
+        else
+            local indicesToRemove = {}
+
+            for i, type in ipairs(customTypes) do
+                imgui.Text(u8(type.event))
+                imgui.SameLine()
+                imgui.Text(u8(type.chatString))
+                imgui.SameLine()
+                if imgui.Button(u8'Удалить ' .. i) then
+                    table.insert(indicesToRemove, 1, i)
+                end
+            end
+
+            for _, i in ipairs(indicesToRemove) do
+                table.remove(customTypes, i)
+            end
+
+            if #indicesToRemove > 0 then
+                saveData()
+            end
+        end
+        
+        imgui.End()
+        if not types_window_state[0] then
+            imgui.GetIO().MouseDrawCursor = false
+        end
+    end
+)
+
+local editWindow = imgui.OnFrame(
+	function() return edit_window_state[0] end,
+	function(player)
+		imgui.SetNextWindowSize(imgui.ImVec2(500, 400), imgui.Cond.FirstUseEver)
+        imgui.Begin(u8'My Salary: Редактирование операции', edit_window_state, imgui.WindowFlags.NoCollapse)
+		player.HideCursor = false
+		
+		imgui.Text(u8(editOperation))
+
+        imgui.End()
+		if not edit_window_state[0] then
 		imgui.GetIO().MouseDrawCursor = false
 		end
     end
@@ -559,6 +987,14 @@ local mainWindow = imgui.OnFrame(
 -- Открытие/закрытие окна
 function openMainWindow()
     main_window_state[0]= not main_window_state[0]
+end
+
+function openChatLog()
+    log_window_state[0]= not log_window_state[0]
+end
+
+function openTypesWindow()
+	types_window_state[0] = not types_window_state[0]
 end
 
 -- Форматирование чисел
@@ -597,15 +1033,15 @@ end
 
 function formatTime(mode, vremya)
 	if mode == 0 then
-		oTime = totalOnlineTime
+		onlTime = totalOnlineTime
 	elseif mode == 1 then
-		oTime = vremya or 0
+		onlTime = vremya or 0
 	else 
-		oTime = gameClock()
+		onlTime = gameClock()
 	end
 	
-	local timeHours = math.floor(oTime / 3600)
-    local remaining = oTime % 3600
+	local timeHours = math.floor(onlTime / 3600)
+    local remaining = onlTime % 3600
     local timeMins = math.floor(remaining / 60)
     local timeSecs = remaining % 60
 
@@ -624,7 +1060,12 @@ function getWeekStats()
         weekEarned = 0,
         weekSpended = 0,
         weekSalary = 0,
-        weekPayDay = 0
+        weekPayDay = 0,
+		weekBankEarn = 0,
+		weekDepEarn = 0,
+		weekBankSpend = 0,
+		weekDepSpend = 0,
+		weekOnline = 0
     }
 
     for i = 0, 6 do
@@ -634,6 +1075,11 @@ function getWeekStats()
             stats.weekSpended = stats.weekSpended + (data.salary[date].spended or 0)
             stats.weekSalary = stats.weekSalary + (data.salary[date].daySalary or 0)
             stats.weekPayDay = stats.weekPayDay + (data.salary[date].payDayCount or 0)
+			stats.weekBankEarn = stats.weekBankEarn + (data.salary[date].bankEarn or 0)
+			stats.weekDepEarn = stats.weekDepEarn + (data.salary[date].depEarn or 0)
+			stats.weekBankSpend = stats.weekBankSpend + (data.salary[date].bankSpend or 0)
+			stats.weekDepSpend = stats.weekDepSpend + (data.salary[date].depSpend or 0)
+			stats.weekOnline = stats.weekOnline + (data.salary[date].totalOnlineTime or 0)
         end
     end
 
@@ -646,7 +1092,12 @@ function getMonthStats()
         monthEarned = 0,
         monthSpended = 0,
         monthSalary = 0,
-        monthPayDay = 0
+        monthPayDay = 0,
+		monthBankEarn = 0,
+		monthDepEarn = 0,
+		monthBankSpend = 0,
+		monthDepSpend = 0,
+		monthOnline = 0
     }
 
     for i = 0, 29 do
@@ -656,6 +1107,11 @@ function getMonthStats()
             stats.monthSpended = stats.monthSpended + (data.salary[date].spended or 0)
             stats.monthSalary = stats.monthSalary + (data.salary[date].daySalary or 0)
             stats.monthPayDay = stats.monthPayDay + (data.salary[date].payDayCount or 0)
+			stats.monthBankEarn = stats.monthBankEarn + (data.salary[date].bankEarn or 0)
+			stats.monthDepEarn = stats.monthDepEarn + (data.salary[date].depEarn or 0)
+			stats.monthBankSpend = stats.monthBankSpend + (data.salary[date].bankSpend or 0)
+			stats.monthDepSpend = stats.monthDepSpend + (data.salary[date].depSpend or 0)
+			stats.monthOnline = stats.monthOnline + (data.salary[date].totalOnlineTime or 0)
         end
     end
 
@@ -669,7 +1125,73 @@ function countPayDay()
     if (currentOsTime.min == 0 or currentOsTime.min == 30) and (now - lastPayDay >= 1800) then
         payDayCount = payDayCount + 1
         lastPayDay = now
+		getBankEarnings()
     end
+end
+
+function getBankEarnings()
+    local currentTime = os.time()
+    local timeWindow = 300 -- 5-минутное окно поиска
+	
+    -- Поиск по блоку с заголовком
+    for i = #chatLog, 1, -1 do
+        local entry = chatLog[i]
+        
+        if entry.time >= (currentTime - timeWindow) then
+            if entry.text:match("Банковский чек") then
+                for j = i, math.min(i + 10, #chatLog) do
+                    local text = chatLog[j].text
+                    
+                    -- Парсинг банка с защитой от ошибок
+                    if text:find("Текущая сумма в банке") then
+                        local amount_str = text:match("%+%$([%d%.]+)")
+                        if amount_str then
+                            local cleaned = amount_str:gsub("%D", "")
+                            if cleaned ~= "" then
+                                bankEarn = bankEarn + tonumber(cleaned) or 0
+                                print("[БАНК] Получено:", tonumber(cleaned))
+                            end
+                        end
+                    end
+                    
+                    -- Парсинг депозита с защитой от ошибок
+                    if text:find("Текущая сумма на депозите") then
+                        local amount_str = text:match("%+%$([%d%.]+)")
+                        if amount_str then
+                            local cleaned = amount_str:gsub("%D", "")
+                            if cleaned ~= "" then
+                                depEarn = depEarn + tonumber(cleaned) or 0
+                                print("[ДЕПОЗИТ] Получено:", tonumber(cleaned))
+                            end
+                        end
+                    end
+                end
+                break
+            end
+        end
+    end
+    
+    -- Если не найдено, ищем в последних сообщениях
+    if bankEarn == 0 or depEarn == 0 then
+        for i = #chatLog, math.max(1, #chatLog - 20), -1 do
+            local text = chatLog[i].text
+            
+            if text:find("Текущая сумма в банке") then
+                local amount_str = text:match("%+%$([%d%.]+)")
+                if amount_str then
+                    bankEarn = bankEarn + tonumber(amount_str:gsub("%D", "")) or 0
+                end
+            end
+            
+            if text:find("Текущая сумма на депозите") then
+                local amount_str = text:match("%+%$([%d%.]+)")
+                if amount_str then
+                    depEarn = depEarn + tonumber(amount_str:gsub("%D", "")) or 0
+                end
+            end
+        end
+    end
+    return bankEarn, depEarn
 end
 
 local function fetchReleaseData()
@@ -761,3 +1283,116 @@ end
 function setScreenResolution()
 	screenResX[0], screenResY[0] = getScreenResolution()
 end
+
+function events.onServerMessage(color, text)
+    local uncoloredText = string.gsub(text, "{.-}", "")
+    table.insert(chatLog, {
+        time = os.time(), -- Сохраняем timestamp вместо строки
+        text = uncoloredText
+    })
+    
+    -- Ограничиваем размер лога (например, последние 50 сообщений)
+    if #chatLog > 200 then
+        table.remove(chatLog, 1)
+    end
+end
+
+function createLog(oTime, summ, sym)
+    operationType = "Операция не определена"
+    logString = ""
+    for i = #chatLog, 1, -1 do
+        local logEntry = chatLog[i]
+        -- Проверяем, было ли сообщение не более 5 секунд назад
+        if oTime - logEntry.time <= 5 then
+            -- Инициализация customTypes при необходимости
+            if next(customTypes) == nil then
+                customTypes = {
+                    {event = "HIDDEN", chatString = "DO NOT DELETE"}
+                }
+            end
+            
+            local found = false -- Флаг для отслеживания найденного совпадения
+            
+            -- Сначала проверяем все элементы в customTypes
+            for _, event in ipairs(customTypes) do
+                if string.match(logEntry.text, event.chatString) then
+                    operationType = event.event
+					logString = logEntry.text
+                    found = true
+                    break -- Выходим из цикла по customTypes
+                end
+            end
+            
+            -- Если в customTypes не нашли, проверяем moneyEvents
+            if not found then
+                for _, event in ipairs(moneyEvents) do
+                    if string.match(logEntry.text, event.chatString) then
+                        operationType = event.event
+						logString = logEntry.text
+                        found = true
+                        break -- Выходим из цикла по moneyEvents
+                    end
+                end
+            end
+            
+            -- Удаляем HIDDEN, если он был добавлен
+            if customTypes[1] and customTypes[1].event == "HIDDEN" then
+                table.remove(customTypes, 1)
+            end
+            
+            -- Если нашли совпадение, прерываем цикл по chatLog
+            if found then
+                break
+            end
+        else
+            break -- Прерываем, если сообщения слишком старые
+        end
+    end
+    
+	if string.match(logString, "Вы сняли со своего банковского счета") then
+		amount = clearSumm(logString)
+		if amount then
+			bankSpend = bankSpend - amount
+		end
+	end
+	
+	if string.match(logString, "Вы положили на свой банковский счет") then
+		amount = clearSumm(logString)
+			if amount then
+				bankEarn = bankEarn + amount
+			end
+	end
+	
+	if string.match(logString, "Вы положили на свой депозитный счет") then
+		amount = clearSumm(logString)
+			if amount then
+				depEarn = depEarn + amount
+			end
+	end
+	
+	if string.match(logString, "Вы сняли деньги с депозитного счета") then
+		amount = clearSumm(logString)
+			if amount then
+				depSpend = depSpend - amount
+			end
+	end
+	
+	
+    lastOperations[os.date("%H:%M:%S", oTime)] = {
+        sym = sym,
+        summ = summ,
+        type = operationType
+    }
+end
+
+function clearSumm(logString)
+	local amount_str = logString:match("%$([%d%.]+)")
+	if amount_str then
+		-- Удаляем все НЕ-цифры (включая точки, запятые и другие символы)
+		local cleaned_amount = amount_str:gsub("[^%d]", "")
+		-- Преобразуем в число (без указания системы счисления)
+		amount = tonumber(cleaned_amount)
+		return amount
+	end
+end
+

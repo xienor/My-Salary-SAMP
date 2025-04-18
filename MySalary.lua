@@ -1,7 +1,7 @@
 -- Характеристики скрипта
 script_name("My Salary")
 script_authors("mihaha")
-script_version("0.15.4")
+script_version("0.15.5")
 
 -- Подключение библиотек
 require 'moonloader'
@@ -505,10 +505,12 @@ local mainWindow = imgui.OnFrame(
             if statTab == 1 then
 				if imgui.BeginChild('Cash', imgui.ImVec2(statsChildWidth[0], 130), true) then
 					if widget_stat_mode[0] == false then
+						imgui.Text(u8'Онлайн за сессию: ' .. formatTime(2, 0))
 						imgui.Text(u8'Доход за сессию: ' .. formatNumber(sessionEarn) .. '$')
 						imgui.Text(u8'Расход за сессию: ' .. formatNumber(sessionSpend) .. '$')
 						imgui.Text(u8'Итого за сессию: ' .. formatNumber(sessSalary) .. '$')
 					else
+						imgui.Text(u8'Онлайн за сегодня: ' .. formatTime(0, 0))
 						imgui.Text(u8'Доход за сегодня: ' .. formatNumber(earned) .. '$')
 						imgui.Text(u8'Расход за сегодня: ' .. formatNumber(spended) .. '$')
 						imgui.Text(u8'Итого за сегодня: ' .. formatNumber(daySalary) .. ' $')
@@ -560,6 +562,7 @@ local mainWindow = imgui.OnFrame(
             if statTab == 2 then
                 local stats = getWeekStats()
 				if imgui.BeginChild('Cash', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Онлайн за неделю: ' .. formatTime(1, stats.weekOnline))
 					imgui.Text(u8'Доход за неделю: ' .. formatNumber(stats.weekEarned) .. '$')
 					imgui.Text(u8'Расход за неделю: ' .. formatNumber(stats.weekSpended) .. '$')
 					imgui.Text(u8'Итого за неделю: ' .. formatNumber(stats.weekSalary) .. '$')
@@ -582,6 +585,7 @@ local mainWindow = imgui.OnFrame(
             if statTab == 3 then
                 local stats = getMonthStats()
 				if imgui.BeginChild('Cash', imgui.ImVec2(statsChildWidth[0], 130), true) then
+					imgui.Text(u8'Онлайн за месяц: ' .. formatTime(1, stats.monthOnline))
 					imgui.Text(u8'Доход за месяц: ' .. formatNumber(stats.monthEarned) .. '$')
 					imgui.Text(u8'Расход за месяц: ' .. formatNumber(stats.monthSpended) .. '$')
 					imgui.Text(u8'Итого за месяц: ' .. formatNumber(stats.monthSalary) .. '$')
@@ -1029,15 +1033,15 @@ end
 
 function formatTime(mode, vremya)
 	if mode == 0 then
-		oTime = totalOnlineTime
+		onlTime = totalOnlineTime
 	elseif mode == 1 then
-		oTime = vremya or 0
+		onlTime = vremya or 0
 	else 
-		oTime = gameClock()
+		onlTime = gameClock()
 	end
 	
-	local timeHours = math.floor(oTime / 3600)
-    local remaining = oTime % 3600
+	local timeHours = math.floor(onlTime / 3600)
+    local remaining = onlTime % 3600
     local timeMins = math.floor(remaining / 60)
     local timeSecs = remaining % 60
 
@@ -1060,7 +1064,8 @@ function getWeekStats()
 		weekBankEarn = 0,
 		weekDepEarn = 0,
 		weekBankSpend = 0,
-		weekDepSpend = 0
+		weekDepSpend = 0,
+		weekOnline = 0
     }
 
     for i = 0, 6 do
@@ -1074,6 +1079,7 @@ function getWeekStats()
 			stats.weekDepEarn = stats.weekDepEarn + (data.salary[date].depEarn or 0)
 			stats.weekBankSpend = stats.weekBankSpend + (data.salary[date].bankSpend or 0)
 			stats.weekDepSpend = stats.weekDepSpend + (data.salary[date].depSpend or 0)
+			stats.weekOnline = stats.weekOnline + (data.salary[date].totalOnlineTime or 0)
         end
     end
 
@@ -1090,7 +1096,8 @@ function getMonthStats()
 		monthBankEarn = 0,
 		monthDepEarn = 0,
 		monthBankSpend = 0,
-		monthDepSpend = 0
+		monthDepSpend = 0,
+		monthOnline = 0
     }
 
     for i = 0, 29 do
@@ -1104,6 +1111,7 @@ function getMonthStats()
 			stats.monthDepEarn = stats.monthDepEarn + (data.salary[date].depEarn or 0)
 			stats.monthBankSpend = stats.monthBankSpend + (data.salary[date].bankSpend or 0)
 			stats.monthDepSpend = stats.monthDepSpend + (data.salary[date].depSpend or 0)
+			stats.monthOnline = stats.monthOnline + (data.salary[date].totalOnlineTime or 0)
         end
     end
 
